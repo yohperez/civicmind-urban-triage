@@ -1,5 +1,11 @@
 # Motor de triaje asistido por LLM (API type-safe, multi-proveedor)
 
+<p align="center">
+  <img src="img/logo-civicmind.png" alt="CivicMind Logo" width="500">
+</p>
+
+> **Type-Safe Urban Triage Engine**  
+> From citizen report to actionable decision.
 Proyecto I — Módulo V: AI Engineering.
 
 Microservicio backend (FastAPI + Pydantic) que clasifica incidencias
