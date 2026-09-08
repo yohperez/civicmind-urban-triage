@@ -282,6 +282,98 @@ except requests.RequestException:
     st.warning(f"No se pudo conectar con la API en `{API_URL}`. ¿Está desplegado/corriendo el backend?")
 
 st.divider()
+
+# --------------------------------------------------------------------------
+# Asistente CivicMind (chatbot) — local (Ollama) o externo (Gemini)
+# --------------------------------------------------------------------------
+st.markdown('<div class="cm-section-title">💬 Asistente CivicMind</div>', unsafe_allow_html=True)
+st.markdown(
+    '<p class="cm-caption">Chatbot de apoyo para el operador: resuelve dudas sobre el pipeline, '
+    "el criterio anti-sesgo, o el porqué de una clasificación — no vuelve a triar la incidencia "
+    "(para eso usa el formulario de arriba). Comparte el mismo backend/proveedores que el motor "
+    "de triaje, vía el endpoint <code>/chat</code>.</p>",
+    unsafe_allow_html=True,
+)
+
+if "chat_historial" not in st.session_state:
+    st.session_state.chat_historial = []  # [{"rol": "user"|"assistant", "contenido": str}, ...]
+
+with st.expander("⚙️ Proveedor del asistente", expanded=False):
+    col_chat1, col_chat2, col_chat3 = st.columns([1, 1, 1])
+    with col_chat1:
+        chat_proveedor = st.selectbox(
+            "Proveedor", ["local", "externo"], key="chat_proveedor",
+            help="local = Ollama (on-premise o Cloud) · externo = Gemini",
+        )
+    with col_chat2:
+        if chat_proveedor == "local":
+            chat_modelo_preset = st.selectbox("Modelo Ollama", MODELOS_OLLAMA_SUGERIDOS, key="chat_modelo_ollama_preset")
+            chat_modelo_ollama_custom = st.text_input("…o escribe otro tag", key="chat_modelo_ollama_custom", placeholder="ej. minimax-m2.7:cloud")
+            chat_modelo_externo = None
+        else:
+            chat_modelo_externo = st.text_input("Modelo Gemini", value="gemini-2.0-flash", key="chat_modelo_externo")
+            chat_modelo_ollama_custom = ""
+            chat_modelo_preset = MODELOS_OLLAMA_SUGERIDOS[0]
+    with col_chat3:
+        if st.button("🗑️ Vaciar conversación", use_container_width=True):
+            st.session_state.chat_historial = []
+            st.rerun()
+
+# Pinta el historial ya existente
+for turno in st.session_state.chat_historial:
+    with st.chat_message(turno["rol"]):
+        st.markdown(turno["contenido"])
+        if turno.get("meta"):
+            st.markdown(f'<p class="cm-caption">{turno["meta"]}</p>', unsafe_allow_html=True)
+
+pregunta = st.chat_input("Pregúntale algo al asistente de CivicMind…")
+if pregunta:
+    st.session_state.chat_historial.append({"rol": "user", "contenido": pregunta})
+    with st.chat_message("user"):
+        st.markdown(pregunta)
+
+    chat_modelo_ollama = (chat_modelo_ollama_custom or "").strip() or (
+        chat_modelo_preset if chat_modelo_preset != MODELOS_OLLAMA_SUGERIDOS[0] else None
+    )
+
+    payload_chat = {
+        "mensaje": pregunta,
+        # El backend solo espera rol/contenido de turnos anteriores, sin el actual.
+        "historial": [
+            {"rol": t["rol"], "contenido": t["contenido"]}
+            for t in st.session_state.chat_historial[:-1]
+        ],
+        "proveedor": chat_proveedor,
+    }
+    if chat_proveedor == "local" and chat_modelo_ollama:
+        payload_chat["modelo_ollama"] = chat_modelo_ollama
+    if chat_proveedor == "externo" and chat_modelo_externo:
+        payload_chat["modelo_externo"] = chat_modelo_externo
+
+    with st.chat_message("assistant"):
+        with st.spinner("El asistente está pensando…"):
+            try:
+                resp = requests.post(f"{API_URL}/chat", json=payload_chat, timeout=60)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    respuesta_txt = data["respuesta"]
+                    m = data["metricas"]
+                    meta = (
+                        f'{m["proveedor"].upper()} · {m["modelo"]} · ⏱ {m["latencia_ms"]} ms · '
+                        f'💰 ${m["coste_estimado_usd"]} · 🔤 {m["tokens_entrada"]}+{m["tokens_salida"]} tokens'
+                    )
+                    st.markdown(respuesta_txt)
+                    st.markdown(f'<p class="cm-caption">{meta}</p>', unsafe_allow_html=True)
+                    st.session_state.chat_historial.append(
+                        {"rol": "assistant", "contenido": respuesta_txt, "meta": meta}
+                    )
+                else:
+                    detalle = resp.json()
+                    st.error(f"⚠️ El asistente no pudo responder: {detalle}")
+            except requests.RequestException as e:
+                st.error(f"No se pudo contactar la API en `{API_URL}`: {e}")
+
+st.divider()
 st.markdown(
     '<p class="cm-caption">CivicMind — Proyecto I, Módulo V: AI Engineering. '
     "Motor de triaje asistido por LLM, type-safe y multi-proveedor.</p>",

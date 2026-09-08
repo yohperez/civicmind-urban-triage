@@ -11,6 +11,13 @@ para validación humana (Human-in-the-loop) y comparación entre un proveedor
 **local** (Ollama) y uno **externo** (comercial: Gemini/GPT/Claude, o
 gratuito: Groq/Hugging Face).
 
+El dashboard incluye además un **asistente conversacional (chatbot)** —
+también disponible en local (Ollama) o externo (Gemini) — para que el
+operador humano pregunte en lenguaje natural sobre el pipeline, una
+clasificación concreta o el criterio anti-sesgo, sin salir del panel.
+
+🔗 **Producción:** [dashboard-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/)
+
 ## Por qué esta arquitectura (decisión de diseño)
 
 Se prioriza **Ollama** como proveedor por defecto para:
@@ -30,16 +37,16 @@ desplegarlos como dos servicios separados en Railway.
 ```
 civicmind-urban-triage/
 ├── backend/
-│   ├── main.py                   # Endpoint FastAPI (/triaje, /incidencias, /health)
-│   ├── schemas.py                # Modelos Pydantic (entrada, salida, métricas)
+│   ├── main.py                   # Endpoint FastAPI (/triaje, /chat, /incidencias, /health)
+│   ├── schemas.py                # Modelos Pydantic: triaje, métricas y chat (ChatRequest/ChatResponse)
 │   ├── config.py                 # Variables de entorno
 │   └── llm/
-│       ├── base.py               # Lógica común: validación, reintentos, métricas
-│       ├── prompts.py            # System prompt ReAct+CoT, few-shot, anti-sesgo
-│       ├── ollama_provider.py    # Proveedor local
-│       └── external_provider.py  # Proveedor externo — Gemini (google-genai) + retry/backoff
+│       ├── base.py               # Lógica común: triar() (JSON+reintentos) y chat() (texto libre), métricas
+│       ├── prompts.py            # SYSTEM_PROMPT (triaje ReAct+CoT) y CHAT_SYSTEM_PROMPT (chatbot)
+│       ├── ollama_provider.py    # Proveedor local — usado tanto por /triaje como por /chat
+│       └── external_provider.py  # Proveedor externo — Gemini (google-genai) + retry/backoff, JSON mode condicional
 ├── dashboard/
-│   └── app.py                    # Streamlit — marca CivicMind, SVGs, HITL
+│   └── app.py                    # Streamlit — marca CivicMind, SVGs, HITL, formulario de triaje + chatbot
 ├── img/
 │   ├── logo-civicmind.svg        # Logo + wordmark (cabecera del dashboard)
 │   ├── flow-react-cot.svg        # Ilustración del pipeline ReAct+CoT+HITL
@@ -86,6 +93,37 @@ streamlit run dashboard/app.py
 El dashboard lee la URL del backend de la variable de entorno `API_URL`
 (por defecto `http://localhost:8000` en local).
 
+## Asistente conversacional (chatbot)
+
+El panel incluye un chatbot (`💬 Asistente CivicMind`) para resolver dudas
+del operador sin salir del dashboard: cómo funciona el pipeline ReAct+CoT,
+qué significa cada nivel de urgencia, por qué se aplicó cierto criterio
+anti-sesgo, o cuándo conviene local vs. externo. No vuelve a triar
+incidencias — para eso sigue estando el formulario `📝 Nueva incidencia`.
+
+- **Backend:** nuevo endpoint `POST /chat` (`backend/main.py`), que reutiliza
+  el mismo `LLMProvider` que `/triaje` (misma instancia de `OllamaProvider` /
+  `ExternalProvider`, mismo manejo de errores/rate-limit), pero llama a
+  `LLMProvider.chat()` en vez de `.triar()`. `chat()` (nuevo en
+  `backend/llm/base.py`) envía el historial de la conversación y devuelve
+  texto libre — sin el bucle de extracción/validación JSON ni los
+  reintentos por alucinación estructural que sí tiene `.triar()`, porque
+  aquí no hay un esquema Pydantic que cumplir.
+- **Prompt propio:** `CHAT_SYSTEM_PROMPT` en `backend/llm/prompts.py`
+  define la personalidad y límites del asistente (responde en español,
+  no clasifica incidencias, no inventa datos).
+- **Gemini en modo texto libre:** `ExternalProvider._llamar_api_real` ahora
+  acepta un flag `json_mode`; `/triaje` lo activa (fuerza
+  `response_mime_type=application/json` como hacía antes) y `/chat` lo
+  desactiva, para que Gemini responda en lenguaje natural en vez de JSON.
+- **Dashboard:** interfaz de chat nativa de Streamlit (`st.chat_message` /
+  `st.chat_input`), con selector de proveedor/modelo propio (independiente
+  del formulario de triaje) y botón para vaciar la conversación. El
+  historial vive en `st.session_state` mientras dura la sesión del navegador.
+- **Proveedor y modelo:** exactamente los mismos que en `/triaje` — local
+  (Ollama on-premise o Cloud, con los mismos tags sugeridos) o externo
+  (Gemini, indicando el nombre del modelo).
+
 ## Despliegue en Railway
 
 El repo se despliega como **dos servicios Railway independientes** apuntando
@@ -111,11 +149,22 @@ Ambos servicios comparten el mismo `requirements.txt`, así que Railway
 solo necesita construir la imagen una vez por servicio con Nixpacks
 (detecta Python automáticamente).
 
+**Producción actual:** el dashboard está desplegado en
+[dashboard-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/),
+apuntando (vía `API_URL`) al servicio backend correspondiente. El chatbot
+usa el mismo `API_URL`, así que no requiere ninguna variable de entorno
+adicional en Railway más allá de las ya listadas para `/triaje`.
+
 ## Tests
 
 ```bash
 pytest -v
 ```
+
+Incluye tests con mocking para ambos endpoints — `/triaje` (validación
+type-safe, reintentos, errores de proveedor) y `/chat` (respuesta de texto
+libre, reenvío del historial de conversación, mismo manejo de errores que
+`/triaje`) — tanto para el proveedor local como el externo.
 
 ## Identidad visual
 
@@ -149,6 +198,10 @@ Antes de la entrega falta:
       (HITL real, no solo lectura).
 - [ ] Revisar y documentar en la presentación oral los sesgos
       detectados y cómo el prompt los mitiga (criterio C10).
+- [ ] El historial del chatbot vive solo en `st.session_state` (se pierde
+      al recargar la página o entre sesiones) — evaluar si conviene
+      persistirlo junto a `INCIDENCIAS_PROCESADAS` cuando se añada base
+      de datos real.
 
 ## Glosario rápido
 

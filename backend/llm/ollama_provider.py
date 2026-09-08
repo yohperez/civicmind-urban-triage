@@ -42,7 +42,12 @@ class OllamaProvider(LLMProvider):
             return {"Authorization": f"Bearer {self.api_key}"}
         return {}
 
-    def _llamar_modelo(self, mensajes: list[dict]) -> tuple[str, int, int]:
+    def _llamar_modelo(self, mensajes: list[dict], json_mode: bool = True) -> tuple[str, int, int]:
+        # Ollama no tiene un "modo JSON" forzado a nivel de API en /api/chat
+        # (a diferencia de Gemini): el formato de salida ya se controla vía
+        # prompt (SYSTEM_PROMPT para triaje, CHAT_SYSTEM_PROMPT para el
+        # chatbot), así que `json_mode` no cambia nada aquí — se acepta el
+        # parámetro solo para cumplir la interfaz común de LLMProvider.
         try:
             resp = requests.post(
                 f"{self.base_url}/api/chat",

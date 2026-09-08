@@ -17,7 +17,12 @@ from abc import ABC, abstractmethod
 from pydantic import ValidationError
 
 from backend.schemas import TriajeResponse, MetricasRespuesta, Proveedor
-from backend.llm.prompts import SYSTEM_PROMPT, CORRECCION_PROMPT_TEMPLATE, construir_prompt_usuario
+from backend.llm.prompts import (
+    SYSTEM_PROMPT,
+    CORRECCION_PROMPT_TEMPLATE,
+    CHAT_SYSTEM_PROMPT,
+    construir_prompt_usuario,
+)
 
 MAX_REINTENTOS = 2
 
@@ -41,10 +46,15 @@ class LLMProvider(ABC):
     nombre_modelo: str
 
     @abstractmethod
-    def _llamar_modelo(self, mensajes: list[dict]) -> tuple[str, int, int]:
+    def _llamar_modelo(self, mensajes: list[dict], json_mode: bool = True) -> tuple[str, int, int]:
         """
         Debe devolver (texto_respuesta, tokens_entrada, tokens_salida).
         Implementado por cada subclase concreta (Ollama / externo).
+
+        `json_mode` indica si se está pidiendo una salida JSON estricta
+        (triaje) o texto libre (chatbot). Los proveedores que soportan un
+        modo JSON forzado a nivel de API (ej. Gemini) deben desactivarlo
+        cuando `json_mode=False`, o el chatbot respondería siempre en JSON.
         """
         raise NotImplementedError
 
@@ -82,7 +92,7 @@ class LLMProvider(ABC):
         ultimo_error = ""
 
         for intento in range(MAX_REINTENTOS + 1):
-            respuesta_cruda, tok_in, tok_out = self._llamar_modelo(mensajes)
+            respuesta_cruda, tok_in, tok_out = self._llamar_modelo(mensajes, json_mode=True)
             tokens_entrada_total += tok_in
             tokens_salida_total += tok_out
             ultima_respuesta_cruda = respuesta_cruda
@@ -121,3 +131,35 @@ class LLMProvider(ABC):
             f"Último error: {ultimo_error}. Última respuesta: {ultima_respuesta_cruda[:200]}",
             intentos=MAX_REINTENTOS + 1,
         )
+
+    def chat(self, mensaje: str, historial: list[dict] | None = None) -> tuple[str, MetricasRespuesta]:
+        """
+        Turno del asistente conversacional del dashboard (chatbot).
+
+        A diferencia de `triar()`, aquí la salida es texto libre: no hay
+        esquema JSON que validar ni reintentos por alucinación estructural
+        (no aplica — no hay estructura que romper). Reutiliza el mismo
+        `_llamar_modelo` de cada proveedor (Ollama o Gemini), así que
+        hereda gratis el manejo de errores/rate-limit ya implementado ahí.
+
+        `historial` sigue el formato OpenAI-style [{"role", "content"}, ...]
+        con los turnos previos de la conversación (sin incluir `mensaje`).
+        """
+        mensajes = [{"role": "system", "content": CHAT_SYSTEM_PROMPT}]
+        mensajes.extend(historial or [])
+        mensajes.append({"role": "user", "content": mensaje})
+
+        inicio = time.perf_counter()
+        respuesta_cruda, tok_in, tok_out = self._llamar_modelo(mensajes, json_mode=False)
+        latencia_ms = (time.perf_counter() - inicio) * 1000
+
+        metricas = MetricasRespuesta(
+            tokens_entrada=tok_in,
+            tokens_salida=tok_out,
+            coste_estimado_usd=self._calcular_coste(tok_in, tok_out),
+            latencia_ms=round(latencia_ms, 2),
+            proveedor=self.nombre_proveedor,
+            modelo=self.nombre_modelo,
+            reintentos=0,
+        )
+        return respuesta_cruda.strip(), metricas

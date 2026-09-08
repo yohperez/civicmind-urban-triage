@@ -179,3 +179,62 @@ def test_error_no_controlado_sigue_siendo_json(mock_llamar):
     assert resp.status_code == 500
     assert resp.headers["content-type"].startswith("application/json")
     assert resp.json()["error"] == "error_no_controlado"
+
+
+# --------------------------------------------------------------------------
+# /chat — asistente conversacional del dashboard
+# --------------------------------------------------------------------------
+
+@patch.object(OllamaProvider, "_llamar_modelo")
+def test_chat_local_devuelve_texto_libre(mock_llamar):
+    """El chatbot (proveedor local) responde texto plano, sin exigir JSON."""
+    mock_llamar.return_value = ("¡Claro! El pipeline usa ReAct + Chain-of-Thought.", 40, 15)
+
+    resp = client.post("/chat", json={
+        "mensaje": "¿Cómo funciona el pipeline de triaje?",
+        "proveedor": "local",
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["respuesta"] == "¡Claro! El pipeline usa ReAct + Chain-of-Thought."
+    assert data["metricas"]["proveedor"] == "local"
+    assert data["metricas"]["reintentos"] == 0
+    # json_mode=False para el chatbot: no debe forzarse response_mime_type JSON.
+    _, kwargs = mock_llamar.call_args
+    assert kwargs.get("json_mode") is False
+
+
+@patch.object(ExternalProvider, "_llamar_modelo")
+def test_chat_externo_con_historial(mock_llamar):
+    """El chatbot (Gemini) recibe y reenvía el historial previo de la conversación."""
+    mock_llamar.return_value = ("Ollama es gratuito y mantiene los datos en local.", 60, 20)
+
+    resp = client.post("/chat", json={
+        "mensaje": "¿Y por qué usar Ollama en vez de Gemini?",
+        "historial": [
+            {"rol": "user", "contenido": "Hola, tengo una duda sobre los proveedores."},
+            {"rol": "assistant", "contenido": "Claro, dime."},
+        ],
+        "proveedor": "externo",
+        "modelo_externo": "gemini-2.0-flash",
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["metricas"]["modelo"] == "gemini-2.0-flash"
+
+    mensajes_enviados = mock_llamar.call_args[0][0]
+    # system + 2 turnos de historial + mensaje actual = 4
+    assert len(mensajes_enviados) == 4
+    assert mensajes_enviados[0]["role"] == "system"
+    assert mensajes_enviados[-1]["content"] == "¿Y por qué usar Ollama en vez de Gemini?"
+
+
+def test_chat_proveedor_externo_sin_modelo_es_422():
+    """Igual que /triaje: sin modelo_externo, proveedor='externo' se rechaza antes de llamar a Gemini."""
+    resp = client.post("/chat", json={
+        "mensaje": "¿Qué modelo estás usando?",
+        "proveedor": "externo",
+    })
+    assert resp.status_code == 422

@@ -68,7 +68,7 @@ class ExternalProvider(LLMProvider):
         self.temperatura = temperatura
         self.top_p = top_p
 
-    def _llamar_api_real(self, mensajes: list[dict]) -> tuple[str, int, int]:
+    def _llamar_api_real(self, mensajes: list[dict], json_mode: bool = True) -> tuple[str, int, int]:
         """
         Llamada real a Gemini vía google-genai.
 
@@ -88,18 +88,23 @@ class ExternalProvider(LLMProvider):
 
         cliente = _obtener_cliente_gemini()
 
+        config = {
+            "system_instruction": instruccion_sistema,
+            "temperature": self.temperatura,
+            "top_p": self.top_p,
+        }
+        if json_mode:
+            # JSON mode: refuerza a nivel de API lo que ya pide el prompt de
+            # triaje, como segunda barrera antes de que Pydantic valide en
+            # base.py. Se omite para el chatbot (json_mode=False): ahí
+            # queremos texto libre en lenguaje natural, no JSON.
+            config["response_mime_type"] = "application/json"
+
         try:
             respuesta = cliente.models.generate_content(
                 model=self.nombre_modelo,
                 contents=contenidos,
-                config={
-                    "system_instruction": instruccion_sistema,
-                    "temperature": self.temperatura,
-                    "top_p": self.top_p,
-                    # JSON mode: refuerza a nivel de API lo que ya pide el prompt,
-                    # como segunda barrera antes de que Pydantic valide en base.py.
-                    "response_mime_type": "application/json",
-                },
+                config=config,
             )
         except genai_errors.ClientError as e:
             if e.code == 429:
@@ -115,10 +120,10 @@ class ExternalProvider(LLMProvider):
         tokens_salida = uso.candidates_token_count if uso else 0
         return texto, tokens_entrada, tokens_salida
 
-    def _llamar_modelo(self, mensajes: list[dict]) -> tuple[str, int, int]:
+    def _llamar_modelo(self, mensajes: list[dict], json_mode: bool = True) -> tuple[str, int, int]:
         for intento in range(MAX_REINTENTOS_RATE_LIMIT):
             try:
-                return self._llamar_api_real(mensajes)
+                return self._llamar_api_real(mensajes, json_mode=json_mode)
             except RateLimitError:
                 if intento == MAX_REINTENTOS_RATE_LIMIT - 1:
                     raise

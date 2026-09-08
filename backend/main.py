@@ -11,7 +11,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.schemas import IncidenciaRequest, TriajeCompleto, ErrorControlado, Proveedor
+from backend.schemas import (
+    IncidenciaRequest,
+    TriajeCompleto,
+    ErrorControlado,
+    Proveedor,
+    ChatRequest,
+    ChatResponse,
+)
 from backend.llm.base import TriajeInvalidoError
 from backend.llm.ollama_provider import OllamaProvider
 from backend.llm.external_provider import ExternalProvider, RateLimitError
@@ -58,7 +65,12 @@ async def manejador_global_de_errores(request: Request, exc: Exception):
 INCIDENCIAS_PROCESADAS: list[dict] = []
 
 
-def _obtener_proveedor(payload: IncidenciaRequest):
+def _obtener_proveedor(payload: IncidenciaRequest | ChatRequest):
+    """
+    Compartido entre /triaje y /chat: ambos payloads exponen los mismos
+    campos (`proveedor`, `modelo_externo`, `modelo_ollama`), así que
+    instanciar el proveedor LLM correcto es idéntico en los dos endpoints.
+    """
     if payload.proveedor == Proveedor.LOCAL:
         return OllamaProvider(modelo=payload.modelo_ollama)
     if not payload.modelo_externo:
@@ -118,4 +130,37 @@ def procesar_incidencia(payload: IncidenciaRequest):
 def listar_incidencias():
     """Usado por el dashboard de Streamlit para pintar la tabla/histórico."""
     return INCIDENCIAS_PROCESADAS
+
+
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+    responses={422: {"model": ErrorControlado}},
+)
+def chat(payload: ChatRequest):
+    """
+    Turno del asistente conversacional del dashboard (chatbot CivicMind).
+
+    Reutiliza el mismo `LLMProvider` (Ollama o Gemini) que /triaje, pero
+    llama a `.chat()` en vez de `.triar()`: aquí la respuesta es texto
+    libre en lenguaje natural, sin validación Pydantic de un esquema fijo
+    (no hay estructura que un chatbot deba cumplir).
+
+    Errores de proveedor (Ollama caído, rate limit de Gemini, API key
+    inválida...) se manejan igual que en /triaje, para que el dashboard
+    pueda mostrar el mismo tipo de error controlado en ambos flujos.
+    """
+    proveedor = _obtener_proveedor(payload)
+    historial = [{"role": m.rol.value, "content": m.contenido} for m in payload.historial]
+
+    try:
+        respuesta, metricas = proveedor.chat(payload.mensaje, historial=historial)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"Proveedor no disponible: {e}")
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=f"Rate limit persistente del proveedor externo: {e}")
+    except genai_errors.ClientError as e:
+        raise HTTPException(status_code=502, detail=f"Gemini rechazó la petición ({e.code}): {e.message}")
+
+    return ChatResponse(respuesta=respuesta, metricas=metricas)
 

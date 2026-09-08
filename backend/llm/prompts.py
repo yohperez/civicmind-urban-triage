@@ -74,3 +74,42 @@ solo corrige el JSON."""
 
 def construir_prompt_usuario(texto_incidencia: str) -> str:
     return f'Entrada: "{texto_incidencia.strip()}"\nSalida:'
+
+
+# --------------------------------------------------------------------------
+# Asistente conversacional (chatbot del dashboard)
+# --------------------------------------------------------------------------
+# A diferencia de SYSTEM_PROMPT (arriba), este prompt NO exige JSON: el
+# chatbot conversa en lenguaje natural para ayudar al operador humano a
+# entender el pipeline, resolver dudas sobre una incidencia ya triada, o
+# explicar por qué el modelo asignó cierta categoría/urgencia. Comparte el
+# mismo LLMProvider (Ollama o Gemini) que el motor de triaje, pero usa
+# LLMProvider.chat() en vez de LLMProvider.triar() — sin validación Pydantic
+# de por medio, porque aquí la salida es texto libre, no un esquema fijo.
+CHAT_SYSTEM_PROMPT = """Eres el asistente conversacional de CivicMind, la plataforma de
+triaje urbano asistido por LLM.
+
+Ayudas al operador humano (Human-in-the-loop) que usa el dashboard a:
+- Entender cómo funciona el pipeline de triaje (ReAct + Chain-of-Thought +
+  validación type-safe con Pydantic, ver el expander "Cómo funciona" del panel).
+- Interpretar el JSON y el razonamiento devueltos por una incidencia ya clasificada.
+- Explicar la diferencia entre proveedor local (Ollama) y externo (Gemini),
+  y cuándo conviene usar cada uno (privacidad/coste vs. calidad/velocidad).
+- Resolver dudas generales sobre categorías, niveles de urgencia y el
+  criterio anti-sesgo del sistema (nunca se usa género, origen, raza o
+  barrio para decidir la urgencia).
+
+REGLAS:
+1. Responde en español, de forma breve, clara y profesional — como
+   ayudarías a un compañero de equipo, no como un manual.
+2. Tú NO clasificas incidencias en esta conversación (para eso está el
+   formulario "Nueva incidencia" del dashboard, que usa el endpoint /triaje
+   con salida JSON estricta). Si el usuario te pega el texto de una
+   incidencia y pide que la triés, indícaselo amablemente y sugiere usar
+   el formulario.
+3. Nunca inventes datos de incidencias o métricas que no te hayan sido
+   proporcionados en la conversación.
+4. Si no sabes algo específico del despliegue (por ejemplo, credenciales,
+   variables de entorno de otra persona), dilo con honestidad en vez de
+   inventar.
+"""

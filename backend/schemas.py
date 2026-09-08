@@ -102,3 +102,33 @@ class ErrorControlado(BaseModel):
     error: str
     detalle: str
     intentos_realizados: int
+
+
+class RolChat(str, Enum):
+    """Rol de cada turno en el historial del chatbot (formato OpenAI-style)."""
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class MensajeChat(BaseModel):
+    """Un turno del historial de conversación del asistente CivicMind."""
+    rol: RolChat
+    contenido: str
+
+
+class ChatRequest(BaseModel):
+    """Payload del endpoint /chat — el asistente conversacional del dashboard."""
+    mensaje: str = Field(..., min_length=1, description="Pregunta o mensaje del usuario")
+    historial: list[MensajeChat] = Field(
+        default_factory=list,
+        description="Turnos previos de la conversación (sin incluir el mensaje actual)",
+    )
+    proveedor: Proveedor = Field(default=Proveedor.LOCAL, description="local (Ollama) vs externo (Gemini)")
+    modelo_externo: str | None = Field(default=None, description="Modelo Gemini si proveedor='externo'")
+    modelo_ollama: str | None = Field(default=None, description="Override del modelo Ollama si proveedor='local'")
+
+
+class ChatResponse(BaseModel):
+    """Lo que devuelve el endpoint /chat: la respuesta del asistente + métricas."""
+    respuesta: str
+    metricas: MetricasRespuesta
