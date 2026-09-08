@@ -54,6 +54,13 @@ class IncidenciaRequest(BaseModel):
         default=None,
         description="Nombre del modelo externo si proveedor='externo' (ej. 'gemini-2.0-flash')",
     )
+    modelo_ollama: str | None = Field(
+        default=None,
+        description=(
+            "Override opcional del modelo Ollama para esta petición "
+            "(ej. 'gemma4:31b-cloud'). Si se omite, se usa OLLAMA_MODEL_DEFAULT."
+        ),
+    )
 
 
 class TriajeResponse(BaseModel):

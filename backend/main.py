@@ -60,7 +60,7 @@ INCIDENCIAS_PROCESADAS: list[dict] = []
 
 def _obtener_proveedor(payload: IncidenciaRequest):
     if payload.proveedor == Proveedor.LOCAL:
-        return OllamaProvider()
+        return OllamaProvider(modelo=payload.modelo_ollama)
     if not payload.modelo_externo:
         raise HTTPException(
             status_code=422,
