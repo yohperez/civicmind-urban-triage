@@ -131,3 +131,51 @@ def test_triaje_sin_api_key_devuelve_503(mock_cliente):
     })
 
     assert resp.status_code == 503
+
+
+@patch.object(ExternalProvider, "_llamar_modelo")
+def test_triaje_gemini_rechaza_peticion_es_502_json(mock_llamar):
+    """
+    Antes de este fix, un ClientError de Gemini (ej. API key inválida, 400/403)
+    no lo capturaba nadie y FastAPI devolvía texto plano -> el dashboard
+    rompía con 'Expecting value: line 1 column 1'. Ahora debe ser 502 + JSON.
+    """
+    from google.genai import errors as genai_errors
+
+    mock_llamar.side_effect = genai_errors.ClientError(
+        code=403, response_json={"error": {"message": "API key not valid"}}
+    )
+
+    resp = client.post("/triaje", json={
+        "texto": "Reporte de prueba con una API key de Gemini inválida.",
+        "proveedor": "externo",
+        "modelo_externo": "gemini-2.0-flash",
+    })
+
+    assert resp.status_code == 502
+    assert resp.headers["content-type"].startswith("application/json")
+
+
+@patch.object(ExternalProvider, "_llamar_modelo")
+def test_error_no_controlado_sigue_siendo_json(mock_llamar):
+    """
+    Red de seguridad: cualquier excepción inesperada debe devolver JSON, nunca
+    texto plano. Usamos un TestClient con raise_server_exceptions=False porque
+    el comportamiento por defecto del TestClient relanza la excepción original
+    para facilitar el debug en tests — en producción (Railway) el cliente HTTP
+    real SIEMPRE recibe la respuesta JSON de nuestro exception_handler.
+    """
+    from fastapi.testclient import TestClient as _TestClient
+    cliente_sin_relanzar = _TestClient(app, raise_server_exceptions=False)
+
+    mock_llamar.side_effect = ValueError("algo totalmente inesperado")
+
+    resp = cliente_sin_relanzar.post("/triaje", json={
+        "texto": "Reporte de prueba que dispara una excepción no prevista.",
+        "proveedor": "externo",
+        "modelo_externo": "gemini-2.0-flash",
+    })
+
+    assert resp.status_code == 500
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json()["error"] == "error_no_controlado"
