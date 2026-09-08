@@ -16,6 +16,7 @@ como dos servicios Railway separados dentro del mismo repo.
 """
 
 import os
+import textwrap
 from pathlib import Path
 
 import pandas as pd
@@ -54,16 +55,16 @@ def badge_urgencia(nivel: str) -> str:
     }
     color = colores.get(nivel, "#64748B")
     etiqueta = nivel.upper()
-    return f"""
-    <span style="display:inline-flex;align-items:center;gap:6px;
-                 background:{color}1A;color:{color};font-weight:700;
-                 padding:4px 12px;border-radius:999px;font-size:0.85rem;">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-            <circle cx="5" cy="5" r="5" fill="{color}"/>
-        </svg>
-        {etiqueta}
-    </span>
-    """
+    # HTML en una sola línea: si esto lleva saltos de línea con indentación,
+    # Streamlit lo interpreta como bloque de código al incrustarlo en otro
+    # st.markdown y deja de renderizar el HTML (ver nota en la tarjeta de resultado).
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:6px;'
+        f'background:{color}1A;color:{color};font-weight:700;'
+        f'padding:4px 12px;border-radius:999px;font-size:0.85rem;">'
+        f'<svg width="10" height="10" viewBox="0 0 10 10">'
+        f'<circle cx="5" cy="5" r="5" fill="{color}"/></svg> {etiqueta}</span>'
+    )
 
 
 ICONOS_CATEGORIA = {
@@ -78,20 +79,22 @@ ICONOS_CATEGORIA = {
 
 def icono_categoria(categoria: str, tamano: int = 26) -> str:
     color, path = ICONOS_CATEGORIA.get(categoria, ICONOS_CATEGORIA["otros"])
-    return f"""
-    <svg width="{tamano}" height="{tamano}" viewBox="0 0 20 20" style="vertical-align:middle;margin-right:6px;">
-        <circle cx="10" cy="10" r="10" fill="{color}1A"/>
-        <path d="{path}" stroke="{color}" stroke-width="1.6" fill="none"
-              stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    """
+    # Igual que badge_urgencia: una sola línea, sin indentación, para no romper
+    # el parseo del bloque HTML donde se incrusta.
+    return (
+        f'<svg width="{tamano}" height="{tamano}" viewBox="0 0 20 20" '
+        f'style="vertical-align:middle;margin-right:6px;">'
+        f'<circle cx="10" cy="10" r="10" fill="{color}1A"/>'
+        f'<path d="{path}" stroke="{color}" stroke-width="1.6" fill="none" '
+        f'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    )
 
 
 # --------------------------------------------------------------------------
 # Estilos
 # --------------------------------------------------------------------------
 st.markdown(
-    """
+    textwrap.dedent("""\
     <style>
     .cm-hero { padding: 0.5rem 0 1.2rem 0; border-bottom: 1px solid #E2E8F0; margin-bottom: 1.4rem; }
     .cm-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px;
@@ -99,7 +102,7 @@ st.markdown(
     .cm-caption { color: #64748B; font-size: 0.85rem; }
     .cm-section-title { font-size: 1.05rem; font-weight: 700; color: #0F172A; margin-bottom: 0.4rem; }
     </style>
-    """,
+    """).strip(),
     unsafe_allow_html=True,
 )
 
@@ -196,8 +199,7 @@ if enviado and texto.strip():
             with col:
                 t, m = r["triaje"], r["metricas"]
                 icono = icono_categoria(t["categoria"])
-                st.markdown(
-                    f"""
+                tarjeta_html = textwrap.dedent(f"""\
                     <div class="cm-card">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <span style="font-weight:700;">{icono}{m['proveedor'].upper()} · {m['modelo']}</span>
@@ -207,9 +209,8 @@ if enviado and texto.strip():
                         <p style="margin:0.2rem 0;"><b>Departamento:</b> {t['departamento_asignado']}</p>
                         <p style="margin:0.2rem 0;"><b>Resumen:</b> {t['resumen']}</p>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                    """).strip()
+                st.markdown(tarjeta_html, unsafe_allow_html=True)
                 with st.expander("🧠 Ver razonamiento del modelo (CoT/ReAct)"):
                     st.write(t["razonamiento"])
                 st.markdown(
