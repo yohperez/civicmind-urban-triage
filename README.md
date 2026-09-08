@@ -37,7 +37,7 @@ civicmind-urban-triage/
 │       ├── base.py               # Lógica común: validación, reintentos, métricas
 │       ├── prompts.py            # System prompt ReAct+CoT, few-shot, anti-sesgo
 │       ├── ollama_provider.py    # Proveedor local
-│       └── external_provider.py  # Proveedor externo + retry/backoff (SDK: TODO)
+│       └── external_provider.py  # Proveedor externo — Gemini (google-genai) + retry/backoff
 ├── dashboard/
 │   └── app.py                    # Streamlit — marca CivicMind, SVGs, HITL
 ├── img/
@@ -132,11 +132,13 @@ pytest -v
 ## Estado del esqueleto / TODOs pendientes
 
 Este scaffold cubre la arquitectura completa y pasa los tests con el
-LLM **mockeado**. Antes de la entrega falta:
+LLM **mockeado**. El proveedor externo (Gemini) ya está implementado con
+JSON mode + retry/backoff ante 429 y errores 5xx transitorios — solo hace
+falta poner `GEMINI_API_KEY` en las variables de entorno (local o Railway).
+Cómo conseguirla: [Google AI Studio](https://aistudio.google.com/apikey).
 
-- [ ] Implementar `ExternalProvider._llamar_api_real` con el SDK del
-      proveedor comercial elegido (Gemini/GPT/Claude/Groq) y capturar
-      sus errores 429 como `RateLimitError`.
+Antes de la entrega falta:
+
 - [ ] Ajustar `Categoria` y los departamentos en `schemas.py` a los
       reales de la plataforma/ayuntamiento.
 - [ ] Decidir persistencia (`INCIDENCIAS_PROCESADAS` es en memoria —

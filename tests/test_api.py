@@ -8,12 +8,13 @@ Ejecutar con:
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from fastapi.testclient import TestClient
 
 from backend.main import app
 from backend.llm.ollama_provider import OllamaProvider
+from backend.llm.external_provider import ExternalProvider
 
 client = TestClient(app)
 
@@ -90,3 +91,43 @@ def test_input_invalido_texto_muy_corto():
     """Pydantic debe rechazar textos por debajo del min_length antes de llegar al LLM."""
     resp = client.post("/triaje", json={"texto": "corto", "proveedor": "local"})
     assert resp.status_code == 422
+
+
+def test_proveedor_externo_sin_modelo_es_422():
+    """Si proveedor='externo' pero no se indica modelo_externo, debe rechazarse antes de llamar a Gemini."""
+    resp = client.post("/triaje", json={
+        "texto": "Reporte de prueba sin modelo externo indicado.",
+        "proveedor": "externo",
+    })
+    assert resp.status_code == 422
+
+
+@patch.object(ExternalProvider, "_llamar_modelo")
+def test_triaje_proveedor_externo_valido(mock_llamar):
+    """El endpoint debe funcionar igual con Gemini que con Ollama (misma interfaz LLMProvider)."""
+    mock_llamar.return_value = (RESPUESTA_VALIDA, 40, 22)
+
+    resp = client.post("/triaje", json={
+        "texto": "Hay un socavón enorme en la calle principal, casi cae un coche.",
+        "proveedor": "externo",
+        "modelo_externo": "gemini-2.0-flash",
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["metricas"]["proveedor"] == "externo"
+    assert data["metricas"]["modelo"] == "gemini-2.0-flash"
+
+
+@patch("backend.llm.external_provider._obtener_cliente_gemini")
+def test_triaje_sin_api_key_devuelve_503(mock_cliente):
+    """Si GEMINI_API_KEY no está configurada, debe ser un 503 controlado, no un 500 crudo."""
+    mock_cliente.side_effect = RuntimeError("GEMINI_API_KEY no está configurada.")
+
+    resp = client.post("/triaje", json={
+        "texto": "Reporte de prueba sin API key configurada en el entorno.",
+        "proveedor": "externo",
+        "modelo_externo": "gemini-2.0-flash",
+    })
+
+    assert resp.status_code == 503

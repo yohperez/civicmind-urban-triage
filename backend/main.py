@@ -75,6 +75,9 @@ def procesar_incidencia(payload: IncidenciaRequest):
                 intentos_realizados=e.intentos,
             ).model_dump(),
         )
+    except RuntimeError as e:
+        # Ej.: falta GEMINI_API_KEY en las variables de entorno del servicio.
+        raise HTTPException(status_code=503, detail=f"Proveedor no disponible: {e}")
 
     resultado = TriajeCompleto(triaje=triaje, metricas=metricas)
     INCIDENCIAS_PROCESADAS.append({"texto": payload.texto, **resultado.model_dump()})

@@ -8,8 +8,9 @@ python-dotenv>=1.0
 pytest>=8.0
 httpx>=0.27
 
-# Añadir según el/los proveedor(es) externo(s) elegido(s) para la comparación:
-# google-genai        # Gemini
+google-genai>=0.4       # Gemini — proveedor externo por defecto
+
+# Añadir solo si además quieres comparar contra otro proveedor comercial:
 # openai               # GPT
 # anthropic            # Claude
 # groq                 # Groq (capa gratuita)
