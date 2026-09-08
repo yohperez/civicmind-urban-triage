@@ -150,6 +150,16 @@ st.divider()
 # --------------------------------------------------------------------------
 st.markdown('<div class="cm-section-title">📝 Nueva incidencia</div>', unsafe_allow_html=True)
 
+MODELOS_OLLAMA_SUGERIDOS = [
+    "(usar OLLAMA_MODEL_DEFAULT del backend)",
+    "gpt-oss:20b-cloud",
+    "gpt-oss:120b-cloud",
+    "gemma4:cloud",
+    "gemma4:31b-cloud",
+    "qwen3.5:cloud",
+    "deepseek-v4-flash:cloud",
+]
+
 with st.form("nueva_incidencia"):
     texto = st.text_area(
         "Descripción libre de la incidencia",
@@ -158,25 +168,44 @@ with st.form("nueva_incidencia"):
     )
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
-        proveedor = st.selectbox("Proveedor", ["local", "externo"], help="local = Ollama on-premise · externo = API comercial")
+        proveedor = st.selectbox("Proveedor", ["local", "externo"], help="local = Ollama (on-premise o Cloud) · externo = API comercial")
     with col2:
         modelo_externo = st.text_input("Modelo externo (si aplica)", placeholder="ej. gemini-2.0-flash")
     with col3:
         comparar = st.checkbox("Comparar local vs. externo", help="Envía el mismo texto a ambos proveedores a la vez")
+
+    st.caption("🦙 Modelo Ollama (aplica al proveedor **local**, sea on-premise o Ollama Cloud)")
+    col4, col5 = st.columns([1, 1])
+    with col4:
+        modelo_ollama_preset = st.selectbox("Sugeridos", MODELOS_OLLAMA_SUGERIDOS)
+    with col5:
+        modelo_ollama_custom = st.text_input("…o escribe otro tag", placeholder="ej. minimax-m2.7:cloud")
+
     enviado = st.form_submit_button("🚀 Procesar incidencia", use_container_width=True)
 
 if enviado and texto.strip():
+    modelo_ollama = modelo_ollama_custom.strip() or (
+        modelo_ollama_preset if modelo_ollama_preset != MODELOS_OLLAMA_SUGERIDOS[0] else None
+    )
+
+    def _payload_local():
+        p = {"texto": texto, "proveedor": "local"}
+        if modelo_ollama:
+            p["modelo_ollama"] = modelo_ollama
+        return p
+
     payloads = []
     if comparar:
-        payloads.append({"texto": texto, "proveedor": "local"})
+        payloads.append(_payload_local())
         if modelo_externo:
             payloads.append({"texto": texto, "proveedor": "externo", "modelo_externo": modelo_externo})
         else:
             st.warning("Indica un modelo externo para poder comparar contra el proveedor local.")
     else:
-        payload = {"texto": texto, "proveedor": proveedor}
-        if proveedor == "externo":
-            payload["modelo_externo"] = modelo_externo
+        if proveedor == "local":
+            payload = _payload_local()
+        else:
+            payload = {"texto": texto, "proveedor": "externo", "modelo_externo": modelo_externo}
         payloads.append(payload)
 
     resultados = []
