@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+::selection {
+  background: theme("colors.action.dim");
+  color: theme("colors.paper.DEFAULT");
+}
+
+/* Scrollbars discretos, propios de una consola — no el default del navegador */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme("colors.ink.line") transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: theme("colors.ink.line");
+  border-radius: 999px;
+}
+
+:focus-visible {
+  outline: 2px solid theme("colors.action.DEFAULT");
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
