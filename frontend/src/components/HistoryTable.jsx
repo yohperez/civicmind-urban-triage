@@ -1,4 +1,5 @@
 import { HEX_POR_NIVEL } from "./UrgencyBadge.jsx";
+import { useI18n } from "../i18n/I18nContext.jsx";
 
 function StatChip({ label, value }) {
   return (
@@ -10,6 +11,7 @@ function StatChip({ label, value }) {
 }
 
 export default function HistoryTable({ historico, cargando, error }) {
+  const { t, traducirCategoria, traducirUrgencia } = useI18n();
   const total = historico.length;
   const criticasAltas = historico.filter((h) =>
     ["critica", "alta"].includes(h?.triaje?.urgencia)
@@ -21,45 +23,41 @@ export default function HistoryTable({ historico, cargando, error }) {
   return (
     <div>
       <h2 className="font-display text-base font-semibold text-paper">
-        Incidencias procesadas
+        {t("historial.heading")}
       </h2>
-      <p className="mt-1 text-xs text-paper-muted">
-        Histórico servido por la API — volumen y distribución de urgencias del día,
-        coste/latencia por proveedor.
-      </p>
+      <p className="mt-1 text-xs text-paper-muted">{t("historial.subtitulo")}</p>
 
       {error && (
         <p className="mt-4 rounded-chip border border-signal-critica/40 bg-signal-critica/10 px-4 py-3 text-sm text-signal-critica">
-          No se pudo conectar con la API. ¿Está desplegado/corriendo el backend?
+          {t("historial.errorApi")}
         </p>
       )}
 
       {!error && !cargando && total === 0 && (
         <p className="mt-4 rounded-chip border border-ink-line bg-ink-panel px-4 py-3 text-sm text-paper-muted">
-          Aún no hay incidencias procesadas. Envía la primera desde el formulario de
-          arriba.
+          {t("historial.vacio")}
         </p>
       )}
 
       {!error && total > 0 && (
         <>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatChip label="Total procesadas" value={total} />
-            <StatChip label="Críticas / Altas" value={criticasAltas} />
-            <StatChip label="Coste acumulado" value={`$${costeAcumulado}`} />
+            <StatChip label={t("historial.total")} value={total} />
+            <StatChip label={t("historial.criticasAltas")} value={criticasAltas} />
+            <StatChip label={t("historial.costeAcumulado")} value={`$${costeAcumulado}`} />
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-panel border border-ink-line">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-ink-line bg-ink-panel text-xs text-paper-faint">
-                  <th className="px-4 py-2.5 font-medium">Texto</th>
-                  <th className="px-4 py-2.5 font-medium">Categoría</th>
-                  <th className="px-4 py-2.5 font-medium">Urgencia</th>
-                  <th className="px-4 py-2.5 font-medium">Departamento</th>
-                  <th className="px-4 py-2.5 font-medium">Proveedor</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Latencia</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Coste</th>
+                  <th className="px-4 py-2.5 font-medium">{t("historial.colTexto")}</th>
+                  <th className="px-4 py-2.5 font-medium">{t("historial.colCategoria")}</th>
+                  <th className="px-4 py-2.5 font-medium">{t("historial.colUrgencia")}</th>
+                  <th className="px-4 py-2.5 font-medium">{t("historial.colDepartamento")}</th>
+                  <th className="px-4 py-2.5 font-medium">{t("historial.colProveedor")}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{t("historial.colLatencia")}</th>
+                  <th className="px-4 py-2.5 text-right font-medium">{t("historial.colCoste")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -75,10 +73,10 @@ export default function HistoryTable({ historico, cargando, error }) {
                         {h.texto}
                       </td>
                       <td className="px-4 py-2.5 text-paper-muted">
-                        {h?.triaje?.categoria}
+                        {traducirCategoria(h?.triaje?.categoria)}
                       </td>
                       <td className="px-4 py-2.5 text-paper-muted">
-                        {h?.triaje?.urgencia}
+                        {traducirUrgencia(h?.triaje?.urgencia)}
                       </td>
                       <td className="px-4 py-2.5 text-paper-muted">
                         {h?.triaje?.departamento_asignado}

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { enviarMensajeChat } from "../api.js";
-import { MODELOS_OLLAMA_SUGERIDOS } from "./IncidentForm.jsx";
+import { MODELOS_OLLAMA_SUGERIDOS_TAGS } from "./IncidentForm.jsx";
+import { useI18n } from "../i18n/I18nContext.jsx";
 
 const inputClass =
   "w-full rounded-chip border border-ink-line bg-ink px-2.5 py-1.5 text-xs text-paper focus:border-action focus:outline-none";
 
 export default function ChatPanel() {
+  const { t } = useI18n();
   const [historial, setHistorial] = useState([]); // [{rol, contenido, meta?}]
   const [pregunta, setPregunta] = useState("");
   const [pensando, setPensando] = useState(false);
@@ -15,6 +17,11 @@ export default function ChatPanel() {
   const [modeloOllamaCustom, setModeloOllamaCustom] = useState("");
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const scrollRef = useRef(null);
+
+  const MODELOS_OLLAMA_SUGERIDOS = MODELOS_OLLAMA_SUGERIDOS_TAGS.map((value) => ({
+    value,
+    label: value || t("form.ollamaDefault"),
+  }));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -33,7 +40,7 @@ export default function ChatPanel() {
     const modeloOllama = modeloOllamaCustom.trim() || modeloOllamaPreset || undefined;
     const payload = {
       mensaje,
-      historial: historial.map((t) => ({ rol: t.rol, contenido: t.contenido })),
+      historial: historial.map((turno) => ({ rol: turno.rol, contenido: turno.contenido })),
       proveedor,
       ...(proveedor === "local" && modeloOllama ? { modelo_ollama: modeloOllama } : {}),
       ...(proveedor === "externo" && modeloExterno ? { modelo_externo: modeloExterno } : {}),
@@ -42,12 +49,12 @@ export default function ChatPanel() {
     try {
       const data = await enviarMensajeChat(payload);
       const m = data.metricas;
-      const meta = `${m.proveedor.toUpperCase()} · ${m.modelo} · ${m.latencia_ms} ms · $${m.coste_estimado_usd} · ${m.tokens_entrada}+${m.tokens_salida} tokens`;
+      const meta = `${m.proveedor.toUpperCase()} · ${m.modelo} · ${m.latencia_ms} ms · $${m.coste_estimado_usd} · ${m.tokens_entrada}+${m.tokens_salida} ${t("results.tokens")}`;
       setHistorial((h) => [...h, { rol: "assistant", contenido: data.respuesta, meta }]);
     } catch (err) {
       setHistorial((h) => [
         ...h,
-        { rol: "assistant", contenido: `⚠️ El asistente no pudo responder: ${err.message}`, error: true },
+        { rol: "assistant", contenido: `⚠️ ${t("chat.errorPrefix")}: ${err.message}`, error: true },
       ]);
     } finally {
       setPensando(false);
@@ -59,18 +66,17 @@ export default function ChatPanel() {
       <div className="border-b border-ink-line px-4 py-4">
         <div className="flex items-center justify-between">
           <h2 className="font-display text-sm font-semibold text-paper">
-            Asistente CivicMind
+            {t("chat.heading")}
           </h2>
           <button
             onClick={() => setMostrarConfig((v) => !v)}
             className="text-xs text-paper-faint hover:text-action"
           >
-            {mostrarConfig ? "Cerrar" : "Proveedor"}
+            {mostrarConfig ? t("chat.cerrarBtn") : t("chat.proveedorBtn")}
           </button>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-paper-faint">
-          Resuelve dudas sobre el pipeline o el criterio anti-sesgo — no vuelve a triar
-          la incidencia.
+          {t("chat.descripcion")}
         </p>
 
         {mostrarConfig && (
@@ -80,8 +86,8 @@ export default function ChatPanel() {
               value={proveedor}
               onChange={(e) => setProveedor(e.target.value)}
             >
-              <option value="local">local (Ollama)</option>
-              <option value="externo">externo (Gemini)</option>
+              <option value="local">{t("chat.proveedorLocal")}</option>
+              <option value="externo">{t("chat.proveedorExterno")}</option>
             </select>
             {proveedor === "local" ? (
               <>
@@ -98,7 +104,7 @@ export default function ChatPanel() {
                 </select>
                 <input
                   className={inputClass}
-                  placeholder="…o escribe otro tag"
+                  placeholder={t("chat.ollamaCustomPlaceholder")}
                   value={modeloOllamaCustom}
                   onChange={(e) => setModeloOllamaCustom(e.target.value)}
                 />
@@ -114,7 +120,7 @@ export default function ChatPanel() {
               onClick={() => setHistorial([])}
               className="text-xs text-paper-faint hover:text-signal-critica"
             >
-              Vaciar conversación
+              {t("chat.vaciar")}
             </button>
           </div>
         )}
@@ -122,9 +128,7 @@ export default function ChatPanel() {
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {historial.length === 0 && (
-          <p className="text-xs text-paper-faint">
-            Pregúntale algo al asistente de CivicMind…
-          </p>
+          <p className="text-xs text-paper-faint">{t("chat.vacio")}</p>
         )}
         {historial.map((turno, i) => (
           <div
@@ -145,7 +149,7 @@ export default function ChatPanel() {
         ))}
         {pensando && (
           <div className="mr-2 rounded-panel border border-ink-line bg-ink-panel px-3 py-2 text-xs text-paper-faint">
-            El asistente está pensando…
+            {t("chat.pensando")}
           </div>
         )}
       </div>
@@ -154,7 +158,7 @@ export default function ChatPanel() {
         <div className="flex gap-2">
           <input
             className={`${inputClass} flex-1`}
-            placeholder="Escribe tu pregunta…"
+            placeholder={t("chat.inputPlaceholder")}
             value={pregunta}
             onChange={(e) => setPregunta(e.target.value)}
           />
@@ -163,7 +167,7 @@ export default function ChatPanel() {
             disabled={pensando || !pregunta.trim()}
             className="rounded-chip bg-action px-3 py-1.5 text-xs font-medium text-ink hover:bg-action-hover disabled:cursor-not-allowed disabled:bg-ink-line disabled:text-paper-faint"
           >
-            Enviar
+            {t("chat.enviar")}
           </button>
         </div>
       </form>

@@ -1,30 +1,41 @@
 /** @type {import('tailwindcss').Config} */
+
+// Cada color se referencia como canales RGB en una variable CSS, para poder
+// usar los modificadores de opacidad de Tailwind (bg-signal-critica/10) y a
+// la vez soportar el toggle de tema: las variables cambian de valor con la
+// clase `.light` en <html> (ver src/index.css), sin tocar ninguna clase de
+// componente.
+function conVariable(nombre) {
+  return `rgb(var(${nombre}) / <alpha-value>)`;
+}
+
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
+  darkMode: ["class"],
   theme: {
     extend: {
       colors: {
         ink: {
-          DEFAULT: "#12181F", // fondo base
-          panel: "#1B232C", // paneles / tarjetas
-          panelAlt: "#212B35", // hover / fila alterna
-          line: "#2C3641", // bordes finos
+          DEFAULT: conVariable("--color-ink"), // fondo base
+          panel: conVariable("--color-ink-panel"), // paneles / tarjetas
+          panelAlt: conVariable("--color-ink-panel-alt"), // hover / fila alterna
+          line: conVariable("--color-ink-line"), // bordes finos
         },
         paper: {
-          DEFAULT: "#EDEEEA", // texto primario
-          muted: "#8B95A1", // texto secundario
-          faint: "#5B6572", // texto terciario / placeholders
+          DEFAULT: conVariable("--color-paper"), // texto primario
+          muted: conVariable("--color-paper-muted"), // texto secundario
+          faint: conVariable("--color-paper-faint"), // texto terciario / placeholders
         },
         signal: {
-          critica: "#E5484D",
-          alta: "#F5A623",
-          media: "#E8C547",
-          baja: "#4CAF7D",
+          critica: conVariable("--color-signal-critica"),
+          alta: conVariable("--color-signal-alta"),
+          media: conVariable("--color-signal-media"),
+          baja: conVariable("--color-signal-baja"),
         },
         action: {
-          DEFAULT: "#4FB8C9", // único acento interactivo — nunca de severidad
-          hover: "#6FC9D8",
-          dim: "#2E4B50",
+          DEFAULT: conVariable("--color-action"), // único acento interactivo — nunca de severidad
+          hover: conVariable("--color-action-hover"),
+          dim: conVariable("--color-action-dim"),
         },
       },
       fontFamily: {

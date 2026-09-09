@@ -2,10 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Tokens de color como canales RGB (sin `rgb()`, sin comas) para que
+ * Tailwind pueda aplicar opacidad con `bg-x/10`, `border-x/40`, etc.
+ * Ver tailwind.config.js — cada color de la paleta apunta a una de estas
+ * variables. El tema oscuro es el valor por defecto en :root; `.light`
+ * en <html> (ver src/theme/ThemeContext.jsx) sobrescribe con la paleta clara.
+ */
+:root {
+  --color-ink: 18 24 31; /* fondo base */
+  --color-ink-panel: 27 35 44; /* paneles / tarjetas */
+  --color-ink-panel-alt: 33 43 53; /* hover / fila alterna */
+  --color-ink-line: 44 54 65; /* bordes finos */
+
+  --color-paper: 237 238 234; /* texto primario */
+  --color-paper-muted: 139 149 161; /* texto secundario */
+  --color-paper-faint: 91 101 114; /* texto terciario / placeholders */
+
+  --color-signal-critica: 229 72 77;
+  --color-signal-alta: 245 166 35;
+  --color-signal-media: 232 197 71;
+  --color-signal-baja: 76 175 125;
+
+  --color-action: 79 184 201; /* único acento interactivo — nunca de severidad */
+  --color-action-hover: 111 201 216;
+  --color-action-dim: 46 75 80;
+}
+
+:root.light {
+  --color-ink: 247 247 245;
+  --color-ink-panel: 255 255 255;
+  --color-ink-panel-alt: 237 239 240;
+  --color-ink-line: 216 220 224;
+
+  --color-paper: 20 26 33;
+  --color-paper-muted: 75 85 99;
+  --color-paper-faint: 116 125 138;
+
+  --color-signal-critica: 200 45 51;
+  --color-signal-alta: 187 111 8;
+  --color-signal-media: 156 122 6;
+  --color-signal-baja: 39 128 82;
+
+  --color-action: 21 121 138;
+  --color-action-hover: 15 96 111;
+  --color-action-dim: 205 233 237;
+}
+
 html,
 body,
 #root {
   height: 100%;
+}
+
+body {
+  background-color: rgb(var(--color-ink));
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 ::selection {

@@ -1,0 +1,17 @@
+<svg viewBox="0 0 92 90" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#2DD4BF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Insignia: escudo + pulso (triaje) -->
+  <g transform="translate(6,5)">
+    <rect x="0" y="0" width="80" height="80" rx="20" fill="#0F172A"/>
+    <polygon points="40,12 62,21 62,41 40,68 18,41 18,21" fill="url(#shieldGrad)"/>
+    <polyline points="24,44 34,44 38,34 44,50 49,37 56,37"
+              fill="none" stroke="#FFFFFF" stroke-width="4.2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

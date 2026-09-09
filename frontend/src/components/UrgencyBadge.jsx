@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n/I18nContext.jsx";
+
 const COLOR_POR_NIVEL = {
   critica: "signal-critica",
   alta: "signal-alta",
@@ -13,6 +15,7 @@ const HEX_POR_NIVEL = {
 };
 
 export default function UrgencyBadge({ nivel }) {
+  const { traducirUrgencia } = useI18n();
   const hex = HEX_POR_NIVEL[nivel] ?? "#8B95A1";
   return (
     <span
@@ -20,7 +23,7 @@ export default function UrgencyBadge({ nivel }) {
       style={{ background: `${hex}1A`, color: hex }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: hex }} />
-      {nivel}
+      {traducirUrgencia(nivel)}
     </span>
   );
 }

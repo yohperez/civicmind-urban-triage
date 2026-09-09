@@ -5,8 +5,10 @@ import ResultCards from "./components/ResultCards.jsx";
 import HistoryTable from "./components/HistoryTable.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import { triar, listarIncidencias } from "./api.js";
+import { useI18n } from "./i18n/I18nContext.jsx";
 
 export default function App() {
+  const { t } = useI18n();
   const [resultados, setResultados] = useState([]);
   const [enviandoTriaje, setEnviandoTriaje] = useState(false);
   const [errorTriaje, setErrorTriaje] = useState(null);
@@ -41,9 +43,7 @@ export default function App() {
         const r = await triar(p);
         nuevos.push(r);
       } catch (err) {
-        setErrorTriaje(
-          `El modelo no pasó la validación type-safe (${p.proveedor}): ${err.message}`
-        );
+        setErrorTriaje(`${t("app.errorPrefix")} (${p.proveedor}): ${err.message}`);
       }
     }
     setResultados(nuevos);
@@ -58,13 +58,10 @@ export default function App() {
       <main className="flex-1 overflow-y-auto px-8 py-8">
         <header className="mb-8 max-w-3xl border-b border-ink-line pb-6">
           <h1 className="font-display text-2xl font-semibold text-paper">
-            Panel de triaje — revisión humana
+            {t("app.titulo")}
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-paper-muted">
-            Un operador (Human-in-the-loop) revisa cómo el LLM clasifica cada
-            incidencia — categoría, urgencia y departamento — junto con el
-            razonamiento paso a paso que justificó la decisión, antes de darla por
-            buena. Nada se registra a ciegas.
+            {t("app.subtitulo")}
           </p>
         </header>
 
@@ -86,10 +83,7 @@ export default function App() {
           error={errorHistorico}
         />
 
-        <p className="mt-10 text-xs text-paper-faint">
-          CivicMind — Proyecto I, Módulo V: AI Engineering. Motor de triaje asistido
-          por LLM, type-safe y multi-proveedor.
-        </p>
+        <p className="mt-10 text-xs text-paper-faint">{t("app.footer")}</p>
       </main>
 
       <ChatPanel />
