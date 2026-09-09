@@ -18,6 +18,9 @@ clasificación concreta o el criterio anti-sesgo, sin salir del panel.
 
 🔗 **Producción:** [dashboard-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/)
 
+🔗 **Producción:** [frontend-civicmind.up.railway.app](https://frontend-civicmind.up.railway.app/)
+
+
 ## Por qué esta arquitectura (decisión de diseño)
 
 Se prioriza **Ollama** como proveedor por defecto para:
