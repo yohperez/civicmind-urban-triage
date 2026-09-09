@@ -4,6 +4,10 @@ import IncidentForm from "./components/IncidentForm.jsx";
 import ResultCards from "./components/ResultCards.jsx";
 import HistoryTable from "./components/HistoryTable.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
+import MapaIncidencias from "./components/MapaIncidencias.jsx";
+import AuditoriaSesgos from "./components/AuditoriaSesgos.jsx";
+import TriajeStreaming from "./components/TriajeStreaming.jsx";
+import ConsistenciaPanel from "./components/ConsistenciaPanel.jsx";
 import { triar, listarIncidencias } from "./api.js";
 import { useI18n } from "./i18n/I18nContext.jsx";
 
@@ -82,6 +86,16 @@ export default function App() {
           cargando={cargandoHistorico}
           error={errorHistorico}
         />
+
+        <div className="my-8 border-t border-ink-line" />
+
+        {/* Mejoras: mapa, streaming ReAct en vivo, auditoría de sesgos y self-consistency. */}
+        <div className="space-y-6">
+          <MapaIncidencias />
+          <TriajeStreaming />
+          <AuditoriaSesgos />
+          <ConsistenciaPanel />
+        </div>
 
         <p className="mt-10 text-xs text-paper-faint">{t("app.footer")}</p>
       </main>

@@ -1,0 +1,63 @@
+# Levanta todo el stack local con un solo comando:
+#   docker compose up --build
+#
+# Servicios:
+#   - ollama:   modelo local (ecosistema abierto, sin coste por token)
+#   - backend:  FastAPI (motor de triaje), en http://localhost:8000
+#   - frontend: dashboard React/Vite servido con `vite preview`, en http://localhost:5173
+#
+# La primera vez, descarga el modelo dentro del contenedor de Ollama:
+#   docker compose exec ollama ollama pull llama3.1
+#
+# Variables de entorno del proveedor externo (Gemini) se leen desde un
+# archivo .env en la raíz del repo (no versionado) — ver .env.example.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL_DEFAULT: "${OLLAMA_MODEL_DEFAULT:-llama3.1}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      CIVICMIND_DB_PATH: "/data/civicmind.db"
+    volumes:
+      - backend_data:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:8000"
+    ports:
+      - "5173:4173"
+    depends_on:
+      - backend
+
+volumes:
+  ollama_data:
+  backend_data:

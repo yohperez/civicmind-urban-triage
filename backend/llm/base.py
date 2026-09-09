@@ -163,3 +163,69 @@ class LLMProvider(ABC):
             reintentos=0,
         )
         return respuesta_cruda.strip(), metricas
+
+    # ----------------------------------------------------------------------
+    # Streaming — visualizar el ciclo ReAct (Thought/Action/Observation) en
+    # vivo en el dashboard, en vez de esperar en silencio al JSON final.
+    # ----------------------------------------------------------------------
+
+    def _llamar_modelo_stream(self, mensajes: list[dict]):
+        """
+        Generador que produce (fragmento_texto, tokens_entrada, tokens_salida)
+        a medida que el modelo va respondiendo. Implementación por defecto
+        (fallback) para proveedores que no soporten streaming real: hace la
+        llamada normal y entrega todo el texto de una vez como único
+        fragmento. Los proveedores concretos (Ollama, Gemini) la sobrescriben
+        con streaming real.
+        """
+        texto, tok_in, tok_out = self._llamar_modelo(mensajes, json_mode=True)
+        yield texto, tok_in, tok_out
+
+    def triar_stream(self, texto_incidencia: str):
+        """
+        Igual que `triar()`, pero emite eventos incrementales pensados para
+        Server-Sent Events (ver POST /triaje/stream en main.py):
+
+        - {"tipo": "token", "texto": "..."}   por cada fragmento recibido.
+        - {"tipo": "resultado", "triaje": {...}, "metricas": {...}}  al final,
+          si el texto acumulado valida contra TriajeResponse.
+        - {"tipo": "error", "detalle": "...", "texto_crudo": "..."}  si no
+          valida.
+
+        A propósito NO reintenta automáticamente ante una alucinación
+        estructural (a diferencia de `triar()`): el streaming es para que el
+        operador VEA el razonamiento en vivo durante una demo, no para el
+        flujo robusto de guardado — para eso sigue existiendo /triaje.
+        """
+        mensajes = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": construir_prompt_usuario(texto_incidencia)},
+        ]
+
+        inicio = time.perf_counter()
+        texto_acumulado = ""
+        tok_in_total = 0
+        tok_out_total = 0
+
+        for fragmento, tok_in, tok_out in self._llamar_modelo_stream(mensajes):
+            texto_acumulado += fragmento
+            tok_in_total = tok_in or tok_in_total
+            tok_out_total = tok_out or tok_out_total
+            yield {"tipo": "token", "texto": fragmento}
+
+        latencia_ms = (time.perf_counter() - inicio) * 1000
+        try:
+            datos = self._extraer_json(texto_acumulado)
+            triaje = TriajeResponse.model_validate(datos)
+            metricas = MetricasRespuesta(
+                tokens_entrada=tok_in_total,
+                tokens_salida=tok_out_total,
+                coste_estimado_usd=self._calcular_coste(tok_in_total, tok_out_total),
+                latencia_ms=round(latencia_ms, 2),
+                proveedor=self.nombre_proveedor,
+                modelo=self.nombre_modelo,
+                reintentos=0,
+            )
+            yield {"tipo": "resultado", "triaje": triaje.model_dump(), "metricas": metricas.model_dump()}
+        except (json.JSONDecodeError, ValidationError) as e:
+            yield {"tipo": "error", "detalle": str(e), "texto_crudo": texto_acumulado[:500]}

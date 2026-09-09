@@ -61,6 +61,12 @@ class IncidenciaRequest(BaseModel):
             "(ej. 'gemma4:31b-cloud'). Si se omite, se usa OLLAMA_MODEL_DEFAULT."
         ),
     )
+    lat: float | None = Field(
+        default=None, ge=-90, le=90, description="Latitud opcional del reporte (para el mapa del dashboard)"
+    )
+    lon: float | None = Field(
+        default=None, ge=-180, le=180, description="Longitud opcional del reporte (para el mapa del dashboard)"
+    )
 
 
 class TriajeResponse(BaseModel):
@@ -132,3 +138,74 @@ class ChatResponse(BaseModel):
     """Lo que devuelve el endpoint /chat: la respuesta del asistente + métricas."""
     respuesta: str
     metricas: MetricasRespuesta
+
+
+# --------------------------------------------------------------------------
+# Auditoría de sesgos — criterio C10 (control de sesgos éticos)
+# --------------------------------------------------------------------------
+# Deja que el operador escriba manualmente cada variante (en vez de que el
+# backend genere automáticamente sustituciones demográficas): así el propio
+# equipo humano decide qué comparar, y evitamos que el sistema fabrique por
+# su cuenta texto con caracterización étnica/de género, que sería
+# contraproducente incluso en una herramienta pensada para detectar sesgo.
+
+class VarianteAuditoria(BaseModel):
+    """Una de las variantes de texto a comparar (misma incidencia, distinto dato demográfico/de zona)."""
+    etiqueta: str = Field(..., min_length=1, max_length=60, description="Nombre corto, ej. 'Barrio A' / 'Barrio B'")
+    texto: str = Field(..., min_length=10, description="Texto de la incidencia para esta variante")
+
+
+class AuditoriaSesgosRequest(BaseModel):
+    """Payload de POST /auditoria-sesgos."""
+    variantes: list[VarianteAuditoria] = Field(..., min_length=2, max_length=6)
+    proveedor: Proveedor = Field(default=Proveedor.LOCAL)
+    modelo_externo: str | None = None
+    modelo_ollama: str | None = None
+
+
+class ResultadoVarianteAuditoria(BaseModel):
+    etiqueta: str
+    triaje: TriajeResponse
+    metricas: MetricasRespuesta
+
+
+class AuditoriaSesgosResponse(BaseModel):
+    """
+    Resultado de correr todas las variantes con el mismo LLM. Si
+    `urgencias_coinciden` es False, dos textos que solo difieren en un dato
+    demográfico/de ubicación recibieron distinta urgencia — evidencia
+    empírica y accionable de sesgo, en vez de solo confiar en la
+    instrucción anti-sesgo del prompt.
+    """
+    resultados: list[ResultadoVarianteAuditoria]
+    urgencias_coinciden: bool
+    categorias_coinciden: bool
+    alerta: str | None = None
+
+
+# --------------------------------------------------------------------------
+# Self-consistency — fiabilidad del triaje
+# --------------------------------------------------------------------------
+
+class ConsistenciaRequest(BaseModel):
+    """Payload de POST /triaje/consistencia: corre la MISMA incidencia N veces."""
+    texto: str = Field(..., min_length=10)
+    proveedor: Proveedor = Field(default=Proveedor.LOCAL)
+    modelo_externo: str | None = None
+    modelo_ollama: str | None = None
+    repeticiones: int = Field(default=3, ge=2, le=5)
+
+
+class ConsistenciaResponse(BaseModel):
+    """
+    Si `es_consistente` es False, el modelo no dio siempre la misma
+    urgencia/categoría para el mismo texto — señal de que el operador
+    humano (HITL) debería revisar esta incidencia con más cuidado en vez
+    de confiar ciegamente en una única pasada.
+    """
+    ejecuciones: list[TriajeResponse]
+    urgencia_mayoritaria: Urgencia
+    acuerdo_urgencia: float
+    categoria_mayoritaria: Categoria
+    acuerdo_categoria: float
+    es_consistente: bool

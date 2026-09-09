@@ -134,3 +134,46 @@ class ExternalProvider(LLMProvider):
     def _calcular_coste(self, tokens_entrada: int, tokens_salida: int) -> float:
         precio_in, precio_out = PRECIOS_POR_1K_TOKENS.get(self.nombre_modelo, (0.0, 0.0))
         return round((tokens_entrada / 1000) * precio_in + (tokens_salida / 1000) * precio_out, 6)
+
+    def _llamar_modelo_stream(self, mensajes: list[dict]):
+        """
+        Streaming real vía `generate_content_stream`: Gemini va devolviendo
+        chunks de texto a medida que los genera. Nota: aquí NO se aplica el
+        retry/backoff de rate limit (a diferencia de `_llamar_modelo`) — un
+        stream ya iniciado no se puede "reintentar" a medio camino de forma
+        limpia; si Gemini da 429 se propaga como RateLimitError y el
+        endpoint /triaje/stream lo traduce a un evento de error SSE.
+        """
+        instruccion_sistema = ""
+        contenidos = []
+        for m in mensajes:
+            if m["role"] == "system":
+                instruccion_sistema = m["content"]
+                continue
+            rol_gemini = "model" if m["role"] == "assistant" else "user"
+            contenidos.append({"role": rol_gemini, "parts": [{"text": m["content"]}]})
+
+        cliente = _obtener_cliente_gemini()
+        config = {
+            "system_instruction": instruccion_sistema,
+            "temperature": self.temperatura,
+            "top_p": self.top_p,
+            "response_mime_type": "application/json",
+        }
+
+        try:
+            for chunk in cliente.models.generate_content_stream(
+                model=self.nombre_modelo, contents=contenidos, config=config
+            ):
+                fragmento = chunk.text or ""
+                uso = getattr(chunk, "usage_metadata", None)
+                tok_in = uso.prompt_token_count if uso else 0
+                tok_out = uso.candidates_token_count if uso else 0
+                if fragmento:
+                    yield fragmento, tok_in, tok_out
+        except genai_errors.ClientError as e:
+            if e.code == 429:
+                raise RateLimitError(f"Rate limit de Gemini: {e.message}") from e
+            raise
+        except genai_errors.ServerError as e:
+            raise RateLimitError(f"Error transitorio del servidor de Gemini: {e.message}") from e

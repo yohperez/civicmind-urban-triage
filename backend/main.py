@@ -5,11 +5,13 @@ Ejecutar con:
     uvicorn backend.main:app --reload --port 8000
 """
 
+import json
 import logging
+from collections import Counter
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.schemas import (
     IncidenciaRequest,
@@ -18,10 +20,16 @@ from backend.schemas import (
     Proveedor,
     ChatRequest,
     ChatResponse,
+    AuditoriaSesgosRequest,
+    AuditoriaSesgosResponse,
+    ResultadoVarianteAuditoria,
+    ConsistenciaRequest,
+    ConsistenciaResponse,
 )
 from backend.llm.base import TriajeInvalidoError
 from backend.llm.ollama_provider import OllamaProvider
 from backend.llm.external_provider import ExternalProvider, RateLimitError
+from backend.db import init_db, guardar_incidencia, listar_incidencias as db_listar_incidencias
 from google.genai import errors as genai_errors
 
 logger = logging.getLogger("civicmind.backend")
@@ -60,9 +68,13 @@ async def manejador_global_de_errores(request: Request, exc: Exception):
     )
 
 
-# Almacén en memoria de incidencias procesadas, para que el dashboard las liste.
-# TODO: sustituir por una base de datos real (SQLite/Postgres) antes de producción.
-INCIDENCIAS_PROCESADAS: list[dict] = []
+# Se llama al importar el módulo (no en un evento "startup") a propósito:
+# el TestClient de FastAPI/Starlette no siempre dispara los eventos de
+# startup salvo que se use como context manager (`with TestClient(app)`),
+# y aquí queremos que la tabla exista sí o sí antes de la primera petición,
+# tanto en producción como en los tests. init_db() es barata e idempotente
+# (CREATE TABLE IF NOT EXISTS), así que no hay coste real en llamarla aquí.
+init_db()
 
 
 def _obtener_proveedor(payload: IncidenciaRequest | ChatRequest):
@@ -122,14 +134,162 @@ def procesar_incidencia(payload: IncidenciaRequest):
         raise HTTPException(status_code=502, detail=f"Gemini rechazó la petición ({e.code}): {e.message}")
 
     resultado = TriajeCompleto(triaje=triaje, metricas=metricas)
-    INCIDENCIAS_PROCESADAS.append({"texto": payload.texto, **resultado.model_dump()})
+    guardar_incidencia(
+        texto=payload.texto,
+        triaje_dict=resultado.triaje.model_dump(),
+        metricas_dict=resultado.metricas.model_dump(),
+        lat=payload.lat,
+        lon=payload.lon,
+    )
     return resultado
 
 
 @app.get("/incidencias")
 def listar_incidencias():
-    """Usado por el dashboard de Streamlit para pintar la tabla/histórico."""
-    return INCIDENCIAS_PROCESADAS
+    """Usado por el dashboard para pintar la tabla/histórico. Persistido en SQLite (backend/db.py)."""
+    return db_listar_incidencias()
+
+
+@app.get("/incidencias/geo")
+def listar_incidencias_geo():
+    """Solo las incidencias con lat/lon — usado por el mapa del dashboard."""
+    return [i for i in db_listar_incidencias() if i["lat"] is not None and i["lon"] is not None]
+
+
+@app.post(
+    "/triaje/stream",
+    responses={422: {"model": ErrorControlado}},
+)
+def procesar_incidencia_stream(payload: IncidenciaRequest):
+    """
+    Igual que /triaje pero vía Server-Sent Events: emite cada fragmento del
+    razonamiento (ciclo ReAct) a medida que el modelo lo genera, y al final
+    un evento "resultado" (o "error" si no valida). Pensado para que el
+    dashboard muestre el pensamiento del modelo en vivo durante una demo,
+    en vez de una barra de carga opaca.
+
+    OJO: a diferencia de /triaje, aquí NO hay reintentos automáticos ni se
+    guarda en el histórico — es un modo "solo demo/inspección". Para el
+    flujo real (con reintentos y persistencia) se sigue usando /triaje.
+    """
+    proveedor = _obtener_proveedor(payload)
+
+    def generador_eventos():
+        try:
+            for evento in proveedor.triar_stream(payload.texto):
+                yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
+        except RuntimeError as e:
+            yield f"data: {json.dumps({'tipo': 'error', 'detalle': f'Proveedor no disponible: {e}'}, ensure_ascii=False)}\n\n"
+        except RateLimitError as e:
+            yield f"data: {json.dumps({'tipo': 'error', 'detalle': f'Rate limit: {e}'}, ensure_ascii=False)}\n\n"
+        except genai_errors.ClientError as e:
+            yield f"data: {json.dumps({'tipo': 'error', 'detalle': f'Gemini rechazó la petición ({e.code}): {e.message}'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        generador_eventos(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post(
+    "/auditoria-sesgos",
+    response_model=AuditoriaSesgosResponse,
+    responses={422: {"model": ErrorControlado}},
+)
+def auditar_sesgos(payload: AuditoriaSesgosRequest):
+    """
+    Corre el mismo pipeline de triaje sobre varias variantes de un mismo
+    reporte (normalmente idénticas salvo el barrio/género/origen
+    mencionado) y compara si la urgencia/categoría cambia entre ellas.
+
+    Convierte la instrucción anti-sesgo del prompt (criterio C10) en algo
+    verificable con datos, en vez de solo confiar en que el LLM la respete.
+    Las variantes las escribe el operador humano (ver schemas.py) — el
+    backend no genera automáticamente texto con caracterización
+    demográfica.
+    """
+    proveedor = _obtener_proveedor(payload)
+    resultados: list[ResultadoVarianteAuditoria] = []
+
+    for variante in payload.variantes:
+        try:
+            triaje, metricas = proveedor.triar(variante.texto)
+        except TriajeInvalidoError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=ErrorControlado(
+                    error="triaje_invalido",
+                    detalle=f"Variante '{variante.etiqueta}': {e.mensaje}",
+                    intentos_realizados=e.intentos,
+                ).model_dump(),
+            )
+        resultados.append(
+            ResultadoVarianteAuditoria(etiqueta=variante.etiqueta, triaje=triaje, metricas=metricas)
+        )
+
+    urgencias = {r.triaje.urgencia for r in resultados}
+    categorias = {r.triaje.categoria for r in resultados}
+    urgencias_coinciden = len(urgencias) == 1
+    categorias_coinciden = len(categorias) == 1
+
+    alerta = None
+    if not urgencias_coinciden:
+        alerta = (
+            "El nivel de urgencia cambió entre variantes que solo deberían diferir en "
+            "un dato demográfico o de ubicación — revisar posible sesgo."
+        )
+
+    return AuditoriaSesgosResponse(
+        resultados=resultados,
+        urgencias_coinciden=urgencias_coinciden,
+        categorias_coinciden=categorias_coinciden,
+        alerta=alerta,
+    )
+
+
+@app.post(
+    "/triaje/consistencia",
+    response_model=ConsistenciaResponse,
+    responses={422: {"model": ErrorControlado}},
+)
+def evaluar_consistencia(payload: ConsistenciaRequest):
+    """
+    Corre LA MISMA incidencia N veces (payload.repeticiones) y compara los
+    resultados: si el modelo no es determinista en la práctica (temperatura
+    > 0, o simplemente varía), el operador humano debería tratar esa
+    incidencia con más cautela en vez de confiar en una única pasada.
+    """
+    proveedor = _obtener_proveedor(payload)
+    ejecuciones = []
+
+    for _ in range(payload.repeticiones):
+        try:
+            triaje, _metricas = proveedor.triar(payload.texto)
+            ejecuciones.append(triaje)
+        except TriajeInvalidoError as e:
+            raise HTTPException(
+                status_code=422,
+                detail=ErrorControlado(
+                    error="triaje_invalido",
+                    detalle=f"Fallo en una de las repeticiones: {e.mensaje}",
+                    intentos_realizados=e.intentos,
+                ).model_dump(),
+            )
+
+    urgencia_top, conteo_urg = Counter(t.urgencia for t in ejecuciones).most_common(1)[0]
+    categoria_top, conteo_cat = Counter(t.categoria for t in ejecuciones).most_common(1)[0]
+    acuerdo_urg = conteo_urg / len(ejecuciones)
+    acuerdo_cat = conteo_cat / len(ejecuciones)
+
+    return ConsistenciaResponse(
+        ejecuciones=ejecuciones,
+        urgencia_mayoritaria=urgencia_top,
+        acuerdo_urgencia=round(acuerdo_urg, 2),
+        categoria_mayoritaria=categoria_top,
+        acuerdo_categoria=round(acuerdo_cat, 2),
+        es_consistente=(acuerdo_urg == 1.0 and acuerdo_cat == 1.0),
+    )
 
 
 @app.post(

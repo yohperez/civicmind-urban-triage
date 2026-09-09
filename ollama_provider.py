@@ -20,8 +20,6 @@ Mismo endpoint REST (/api/chat) en ambos casos; solo cambian base_url,
 la cabecera Authorization, y el nombre del modelo.
 """
 
-import json
-
 import requests
 
 from backend.llm.base import LLMProvider
@@ -44,12 +42,7 @@ class OllamaProvider(LLMProvider):
             return {"Authorization": f"Bearer {self.api_key}"}
         return {}
 
-    def _llamar_modelo(self, mensajes: list[dict], json_mode: bool = True) -> tuple[str, int, int]:
-        # Ollama no tiene un "modo JSON" forzado a nivel de API en /api/chat
-        # (a diferencia de Gemini): el formato de salida ya se controla vía
-        # prompt (SYSTEM_PROMPT para triaje, CHAT_SYSTEM_PROMPT para el
-        # chatbot), así que `json_mode` no cambia nada aquí — se acepta el
-        # parámetro solo para cumplir la interfaz común de LLMProvider.
+    def _llamar_modelo(self, mensajes: list[dict]) -> tuple[str, int, int]:
         try:
             resp = requests.post(
                 f"{self.base_url}/api/chat",
@@ -82,37 +75,3 @@ class OllamaProvider(LLMProvider):
         # que en local. Si necesitas comparar coste real, documenta el plan
         # contratado aparte (no es un dato que devuelva la API).
         return 0.0
-
-    def _llamar_modelo_stream(self, mensajes: list[dict]):
-        """
-        Streaming real: Ollama, con `stream: True`, devuelve una línea JSON
-        por token/fragmento en vez de un único JSON al final. Cada línea
-        trae el fragmento en message.content y (en la última línea) los
-        contadores finales de tokens.
-        """
-        try:
-            resp = requests.post(
-                f"{self.base_url}/api/chat",
-                headers=self._cabeceras(),
-                json={
-                    "model": self.nombre_modelo,
-                    "messages": mensajes,
-                    "stream": True,
-                    "options": {"temperature": self.temperatura, "top_p": self.top_p},
-                },
-                timeout=120,
-                stream=True,
-            )
-            resp.raise_for_status()
-        except requests.RequestException as exc:
-            raise RuntimeError(f"No se pudo contactar Ollama ({self.base_url}): {exc}") from exc
-
-        for linea in resp.iter_lines():
-            if not linea:
-                continue
-            data = json.loads(linea)
-            fragmento = data.get("message", {}).get("content", "")
-            tok_in = data.get("prompt_eval_count", 0)
-            tok_out = data.get("eval_count", 0)
-            if fragmento:
-                yield fragmento, tok_in, tok_out
