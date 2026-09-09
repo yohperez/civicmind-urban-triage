@@ -9,6 +9,7 @@ export default defineConfig({
   },
   preview: {
     host: true,
-    allowedHosts: ["frontend-civicmind.up.railway.app"],
+    allowedHosts: true,
   },
 });
+ 
