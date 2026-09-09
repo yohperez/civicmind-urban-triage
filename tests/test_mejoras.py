@@ -151,8 +151,36 @@ def test_consistencia_perfecta(mock_llamar):
 
 
 # --------------------------------------------------------------------------
-# Streaming SSE
+# Descarga del histórico como base de datos
 # --------------------------------------------------------------------------
+
+@patch.object(OllamaProvider, "_llamar_modelo")
+def test_descargar_sqlite_devuelve_archivo(mock_llamar):
+    mock_llamar.return_value = (RESPUESTA_ALTA, 40, 20)
+    client.post("/triaje", json={"texto": "Poste caído con cables expuestos.", "proveedor": "local"})
+
+    resp = client.get("/incidencias/descargar")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/x-sqlite3"
+    assert "civicmind.db" in resp.headers["content-disposition"]
+    assert resp.content[:16] == b"SQLite format 3\x00"
+
+
+@patch.object(OllamaProvider, "_llamar_modelo")
+def test_descargar_csv_incluye_la_incidencia(mock_llamar):
+    mock_llamar.return_value = (RESPUESTA_ALTA, 40, 20)
+    client.post("/triaje", json={"texto": "Poste caído con cables expuestos en la vía.", "proveedor": "local"})
+
+    resp = client.get("/incidencias/descargar?formato=csv")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert "Poste caído con cables expuestos en la vía." in resp.text
+    assert "alta" in resp.text
+
+
+def test_descargar_formato_invalido_devuelve_422():
+    resp = client.get("/incidencias/descargar?formato=xml")
+    assert resp.status_code == 422
 
 @patch.object(OllamaProvider, "_llamar_modelo_stream")
 def test_triaje_stream_emite_tokens_y_resultado_final(mock_stream):

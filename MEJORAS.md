@@ -93,11 +93,29 @@ docker compose up --build
 docker compose exec ollama ollama pull llama3.1   # primera vez
 ```
 
+## 7. Descargar el histórico como base de datos
+
+**Archivos:**
+- `backend/main.py` — `GET /incidencias/descargar` (parámetro opcional `?formato=sqlite|csv`).
+- `frontend/src/components/HistoryTable.jsx` — dos botones de descarga junto al título del histórico.
+
+Dos formas de descargar lo procesado:
+- `GET /incidencias/descargar` → el archivo `civicmind.db` (SQLite) completo,
+  tal cual, para abrir con DB Browser for SQLite, `sqlite3` en terminal, o
+  `pandas.read_sql`. Útil como evidencia de entrega o para análisis offline.
+- `GET /incidencias/descargar?formato=csv` → una fila por incidencia con
+  texto + triaje + métricas, para abrir directo en Excel/Sheets.
+
+Devuelve `404` si aún no se procesó ninguna incidencia, y `422` si el
+`formato` no es `sqlite` ni `csv`. Los botones del dashboard solo aparecen
+cuando el histórico tiene al menos una incidencia.
+
 ## Tests nuevos
 
-`tests/test_mejoras.py` (nuevo) — 7 tests con mocking cubriendo las 4
+`tests/test_mejoras.py` (nuevo) — 10 tests con mocking cubriendo las 5
 mejoras de backend (persistencia, auditoría de sesgos, consistencia,
-streaming). Los 16 tests originales siguen pasando sin cambios.
+streaming, descarga). Los 16 tests originales siguen pasando sin cambios
+(26/26 en total).
 
 ## Cómo aplicar estos cambios a tu repo
 

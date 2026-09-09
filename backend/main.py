@@ -5,13 +5,16 @@ Ejecutar con:
     uvicorn backend.main:app --reload --port 8000
 """
 
+import csv
+import io
 import json
 import logging
+import os
 from collections import Counter
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
 from backend.schemas import (
     IncidenciaRequest,
@@ -29,7 +32,7 @@ from backend.schemas import (
 from backend.llm.base import TriajeInvalidoError
 from backend.llm.ollama_provider import OllamaProvider
 from backend.llm.external_provider import ExternalProvider, RateLimitError
-from backend.db import init_db, guardar_incidencia, listar_incidencias as db_listar_incidencias
+from backend.db import init_db, guardar_incidencia, listar_incidencias as db_listar_incidencias, DB_PATH
 from google.genai import errors as genai_errors
 
 logger = logging.getLogger("civicmind.backend")
@@ -154,6 +157,55 @@ def listar_incidencias():
 def listar_incidencias_geo():
     """Solo las incidencias con lat/lon — usado por el mapa del dashboard."""
     return [i for i in db_listar_incidencias() if i["lat"] is not None and i["lon"] is not None]
+
+
+@app.get("/incidencias/descargar")
+def descargar_historico(formato: str = "sqlite"):
+    """
+    Descarga el histórico completo de incidencias procesadas.
+
+    - formato=sqlite (por defecto): el archivo civicmind.db tal cual, listo
+      para abrir con DB Browser for SQLite, `sqlite3` en terminal, o cargar
+      con pandas.read_sql / adjuntar como evidencia en la entrega.
+    - formato=csv: una fila por incidencia (texto + triaje + métricas),
+      para abrir directamente en Excel/Sheets.
+    """
+    if formato == "csv":
+        filas = db_listar_incidencias(limite=100_000)
+        buffer = io.StringIO()
+        escritor = csv.writer(buffer)
+        escritor.writerow([
+            "id", "creado_en", "texto", "lat", "lon",
+            "categoria", "urgencia", "resumen", "departamento_asignado", "razonamiento",
+            "proveedor", "modelo", "tokens_entrada", "tokens_salida",
+            "coste_estimado_usd", "latencia_ms", "reintentos",
+        ])
+        for i in filas:
+            t, m = i["triaje"], i["metricas"]
+            escritor.writerow([
+                i["id"], i["creado_en"], i["texto"], i["lat"], i["lon"],
+                t["categoria"], t["urgencia"], t["resumen"], t["departamento_asignado"], t["razonamiento"],
+                m["proveedor"], m["modelo"], m["tokens_entrada"], m["tokens_salida"],
+                m["coste_estimado_usd"], m["latencia_ms"], m["reintentos"],
+            ])
+
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=civicmind_incidencias.csv"},
+        )
+
+    if formato != "sqlite":
+        raise HTTPException(status_code=422, detail="formato debe ser 'sqlite' o 'csv'.")
+
+    if not os.path.exists(DB_PATH):
+        raise HTTPException(status_code=404, detail="Aún no se ha procesado ninguna incidencia.")
+
+    return FileResponse(
+        DB_PATH,
+        media_type="application/x-sqlite3",
+        filename="civicmind.db",
+    )
 
 
 @app.post(

@@ -1,5 +1,6 @@
 import { HEX_POR_NIVEL } from "./UrgencyBadge.jsx";
 import { useI18n } from "../i18n/I18nContext.jsx";
+import { API_URL } from "../api.js";
 
 function StatChip({ label, value }) {
   return (
@@ -22,10 +23,35 @@ export default function HistoryTable({ historico, cargando, error }) {
 
   return (
     <div>
-      <h2 className="font-display text-base font-semibold text-paper">
-        {t("historial.heading")}
-      </h2>
-      <p className="mt-1 text-xs text-paper-muted">{t("historial.subtitulo")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-base font-semibold text-paper">
+            {t("historial.heading")}
+          </h2>
+          <p className="mt-1 text-xs text-paper-muted">{t("historial.subtitulo")}</p>
+        </div>
+
+        {total > 0 && (
+          <div className="flex shrink-0 gap-2">
+            <a
+              href={`${API_URL}/incidencias/descargar`}
+              download
+              className="rounded-chip border border-ink-line px-3 py-1.5 text-xs text-paper-muted hover:border-action hover:text-action"
+              title="Descarga civicmind.db (SQLite) con todo el histórico"
+            >
+              ⬇ Base de datos (.db)
+            </a>
+            <a
+              href={`${API_URL}/incidencias/descargar?formato=csv`}
+              download
+              className="rounded-chip border border-ink-line px-3 py-1.5 text-xs text-paper-muted hover:border-action hover:text-action"
+              title="Descarga el histórico en CSV (Excel/Sheets/pandas)"
+            >
+              ⬇ CSV
+            </a>
+          </div>
+        )}
+      </div>
 
       {error && (
         <p className="mt-4 rounded-chip border border-signal-critica/40 bg-signal-critica/10 px-4 py-3 text-sm text-signal-critica">
