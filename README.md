@@ -218,7 +218,7 @@ Python automáticamente); el frontend construye su propia imagen Node a
 partir de `frontend/package.json`.
 
 **Producción actual:** el frontend está desplegado en
-[frontend-civicmind.up.railway.app](https://frontend-civicmind.up.railway.app/),
+[civicmind.up.railway.app](https://civicmind.up.railway.app/),
 apuntando (vía `VITE_API_URL`) al servicio backend en
 [backend-civicmind.up.railway.app](https://backend-civicmind.up.railway.app/).
 El chatbot usa el mismo backend, así que no requiere ninguna variable de
