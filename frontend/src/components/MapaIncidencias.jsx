@@ -26,10 +26,13 @@ export default function MapaIncidencias() {
       attributionControl: true,
     }).setView([40.4168, -3.7038], 12); // Madrid por defecto; se reencuadra al cargar datos
 
-    window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap',
-      maxZoom: 19,
-    }).addTo(mapaRef.current);
+    window.L.tileLayer(
+  "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  {
+    attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+    maxZoom: 16,
+  }
+).addTo(mapaRef.current);
 
     capaMarcadoresRef.current = window.L.layerGroup().addTo(mapaRef.current);
 
