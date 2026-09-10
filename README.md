@@ -22,7 +22,7 @@ React como interfaz principal — ver [`frontend/DEPLOY.md`](frontend/DEPLOY.md)
 para el porqué de la migración.
 
 🔗 **Repositorio:** [github.com/yohperez/civicmind-urban-triage](https://github.com/yohperez/civicmind-urban-triage)
-🔗 **Frontend en producción:** [frontend-civicmind.up.railway.app](https://frontend-civicmind.up.railway.app/)
+🔗 **Frontend en producción:** [civicmind.up.railway.app](https://civicmind.up.railway.app/)
 🔗 **Backend (API):** [backend-civicmind.up.railway.app](https://backend-civicmind.up.railway.app/)
 
 ## Por qué esta arquitectura (decisión de diseño)
