@@ -6,7 +6,7 @@ import { useI18n } from "../i18n/I18nContext.jsx";
 const inputClass =
   "w-full rounded-chip border border-ink-line bg-ink px-2.5 py-1.5 text-xs text-paper focus:border-action focus:outline-none";
 
-export default function ChatPanel() {
+export default function ChatPanel({ open = false, onClose = () => {} }) {
   const { t } = useI18n();
   const [historial, setHistorial] = useState([]); // [{rol, contenido, meta?}]
   const [pregunta, setPregunta] = useState("");
@@ -62,18 +62,34 @@ export default function ChatPanel() {
   }
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-ink-line bg-ink">
+    <aside
+      className={`fixed inset-y-0 right-0 z-40 flex h-full w-[85vw] max-w-sm shrink-0 translate-x-full flex-col border-l border-ink-line bg-ink transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-80 lg:max-w-none lg:translate-x-0 ${
+        open ? "translate-x-0" : ""
+      }`}
+    >
       <div className="border-b border-ink-line px-4 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="font-display text-sm font-semibold text-paper">
             {t("chat.heading")}
           </h2>
-          <button
-            onClick={() => setMostrarConfig((v) => !v)}
-            className="text-xs text-paper-faint hover:text-action"
-          >
-            {mostrarConfig ? t("chat.cerrarBtn") : t("chat.proveedorBtn")}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMostrarConfig((v) => !v)}
+              className="text-xs text-paper-faint hover:text-action"
+            >
+              {mostrarConfig ? t("chat.cerrarBtn") : t("chat.proveedorBtn")}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t("nav.cerrarChat")}
+              className="flex h-[22px] w-[22px] items-center justify-center rounded-chip border border-ink-line text-paper-muted lg:hidden"
+            >
+              <svg width="11" height="11" viewBox="0 0 20 20" fill="none">
+                <path d="M4 4l12 12M16 4 4 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-paper-faint">
           {t("chat.descripcion")}

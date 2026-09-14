@@ -25,6 +25,38 @@ para el porqué de la migración.
 🔗 **Frontend en producción:** [civicmind.up.railway.app](https://civicmind.up.railway.app/)
 🔗 **Backend (API):** [backend-civicmind.up.railway.app](https://backend-civicmind.up.railway.app/)
 🔗 **Dashboard Lite (Streamlit):** [dashboard-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/)
+## Cumplimiento del checklist del reto
+
+Repaso frente al checklist de evaluación de `Proyecto_I_Módulo_V__AI_Engineering.pdf`:
+
+- **I. Arquitectura e infraestructura abierta** — Ollama (local + Cloud) como
+  proveedor por defecto, documentado como decisión de diseño (ver sección de
+  abajo). `requirements.txt` bien definido. Este mismo README documenta
+  instalación y ejecución de backend y frontend. ✅
+- **II. API y type-safety** — endpoint FastAPI funcional recibiendo JSON,
+  esquemas Pydantic de entrada y salida (`backend/schemas.py`), manejo de
+  errores con `try/except` en todos los endpoints más un exception handler
+  global, para que ningún fallo tumbe el servicio. ✅
+- **III. Prompt engineering y modelado de salida** — Chain-of-Thought
+  obligatorio dentro de un ciclo ReAct (`backend/llm/prompts.py`), dos
+  ejemplos few-shot para fijar el formato, e instrucciones explícitas
+  anti-sesgo (ignorar género/origen/raza/barrio inferido al fijar la
+  urgencia). ✅
+- **IV. Interfaz visual (Dashboard)** — el frontend React consume la API,
+  muestra categoría/urgencia/departamento y el razonamiento del LLM. ✅
+- **V. Testing** — 23 tests con Pytest (el reto pide un mínimo de 3),
+  incluyendo mocking del LLM tanto para respuestas válidas como para
+  alucinaciones estructurales (`tests/test_api.py`, `tests/test_mejoras.py`,
+  `tests/test_schemas.py`). ✅
+- **VI. Presentación oral** — el storytelling, la justificación técnica y la
+  reflexión sobre sesgos detectados quedan para la demo en vivo; el material
+  de apoyo (este README + `MEJORAS.md`) ya cubre el contexto técnico
+  necesario.
+
+No se detectó ningún punto del checklist sin cubrir; varias mejoras
+(auditoría de sesgos, self-consistency, streaming del razonamiento, mapa de
+incidencias, chatbot) van más allá de lo pedido — ver `MEJORAS.md`.
+
 ## Por qué esta arquitectura (decisión de diseño)
 
 Se prioriza **Ollama** como proveedor por defecto para:
@@ -38,6 +70,50 @@ Se prioriza **Ollama** como proveedor por defecto para:
 Backend, frontend y dashboard son **procesos independientes** que se
 comunican por HTTP (nunca importan código el uno del otro), precisamente
 para poder desplegarlos como servicios separados en Railway.
+
+## Cómo actúa Pydantic (type-safety)
+
+Pydantic cumple dos roles distintos, ambos en `backend/schemas.py`:
+
+1. **Validar la entrada** (`IncidenciaRequest`): lo que llega al endpoint —
+   `texto` con longitud mínima, `proveedor` como Enum cerrado, `lat`/`lon`
+   opcionales con rango (-90/90, -180/180). Si el payload no cumple, FastAPI
+   devuelve un 422 automáticamente, antes de que se ejecute ninguna lógica.
+2. **Validar la salida del LLM** (`TriajeResponse`): el modelo devuelve
+   texto plano; ese texto se parsea a JSON y se valida contra
+   `TriajeResponse` en `backend/llm/base.py`. Si el modelo alucina un campo,
+   usa un tipo incorrecto o mete texto fuera del JSON, Pydantic lanza
+   `ValidationError`. En vez de dejar caer la API, `base.py` captura ese
+   error y le devuelve al modelo el mensaje de validación pidiéndole que
+   corrija (hasta `MAX_REINTENTOS = 2` veces). Si tras los reintentos sigue
+   sin cumplir el esquema, se lanza `TriajeInvalidoError`, que `main.py`
+   convierte en un error controlado (JSON con código de estado, nunca un
+   crash del servicio).
+
+Pydantic actúa así como el árbitro entre el texto libre no confiable que
+produce el LLM y el resto del sistema, que sí espera tipos estrictos.
+
+## Ubicación en el mapa y layout responsive (móvil)
+
+- **Mapa desde el formulario:** el mapa de incidencias
+  (`MapaIncidencias.jsx`, sección 2 de `MEJORAS.md`) y el endpoint
+  `GET /incidencias/geo` ya validaban y servían `lat`/`lon`, pero el
+  formulario (`IncidentForm.jsx`) no tenía ningún campo para introducirlos
+  — nunca se enviaban coordenadas. Ahora `IncidentForm.jsx` incluye inputs
+  numéricos de latitud/longitud (opcionales, con los mismos rangos que
+  valida `IncidenciaRequest`) y un botón "Usar mi ubicación"
+  (`navigator.geolocation`). En cuanto se envía una incidencia con
+  ubicación, aparece en el mapa.
+- **Layout responsive:** el layout era de 3 columnas fijas (`Sidebar` 256px
+  + contenido + `ChatPanel` 320px) sin ningún breakpoint, por lo que en
+  móvil el contenido central quedaba aplastado. `Sidebar.jsx` y
+  `ChatPanel.jsx` ahora son paneles deslizantes (off-canvas) por debajo del
+  breakpoint `lg`, y vuelven a su posición fija normal en desktop.
+  `App.jsx` añade una barra superior solo-móvil con botón de menú (abre el
+  pipeline) e icono de chat (abre el asistente), más un overlay para cerrar
+  tocando fuera. El resto de componentes (tabla de histórico, tarjetas de
+  resultado) ya usaban grids/`overflow-x-auto` mobile-first y no
+  necesitaron cambios.
 
 ## Estructura
 

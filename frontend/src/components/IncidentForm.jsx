@@ -22,6 +22,31 @@ export default function IncidentForm({ onSubmit, enviando }) {
   const [comparar, setComparar] = useState(false);
   const [modeloOllamaPreset, setModeloOllamaPreset] = useState("");
   const [modeloOllamaCustom, setModeloOllamaCustom] = useState("");
+  const [lat, setLat] = useState("");
+  const [lon, setLon] = useState("");
+  const [ubicando, setUbicando] = useState(false);
+  const [errorUbicacion, setErrorUbicacion] = useState(false);
+
+  function usarMiUbicacion() {
+    if (!navigator.geolocation) {
+      setErrorUbicacion(true);
+      return;
+    }
+    setUbicando(true);
+    setErrorUbicacion(false);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude.toFixed(5));
+        setLon(pos.coords.longitude.toFixed(5));
+        setUbicando(false);
+      },
+      () => {
+        setErrorUbicacion(true);
+        setUbicando(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
 
   const MODELOS_OLLAMA_SUGERIDOS = MODELOS_OLLAMA_SUGERIDOS_TAGS.map((value) => ({
     value,
@@ -34,22 +59,30 @@ export default function IncidentForm({ onSubmit, enviando }) {
 
     const modeloOllama = modeloOllamaCustom.trim() || modeloOllamaPreset || undefined;
 
+    const latNum = lat.trim() !== "" ? Number(lat) : undefined;
+    const lonNum = lon.trim() !== "" ? Number(lon) : undefined;
+    const geo =
+      latNum !== undefined && !Number.isNaN(latNum) && lonNum !== undefined && !Number.isNaN(lonNum)
+        ? { lat: latNum, lon: lonNum }
+        : {};
+
     const construirPayloadLocal = () => ({
       texto,
       proveedor: "local",
       ...(modeloOllama ? { modelo_ollama: modeloOllama } : {}),
+      ...geo,
     });
 
     const payloads = [];
     if (comparar) {
       payloads.push(construirPayloadLocal());
       if (modeloExterno) {
-        payloads.push({ texto, proveedor: "externo", modelo_externo: modeloExterno });
+        payloads.push({ texto, proveedor: "externo", modelo_externo: modeloExterno, ...geo });
       }
     } else if (proveedor === "local") {
       payloads.push(construirPayloadLocal());
     } else {
-      payloads.push({ texto, proveedor: "externo", modelo_externo: modeloExterno });
+      payloads.push({ texto, proveedor: "externo", modelo_externo: modeloExterno, ...geo });
     }
 
     onSubmit(payloads);
@@ -126,6 +159,55 @@ export default function IncidentForm({ onSubmit, enviando }) {
           onChange={(e) => setModeloOllamaCustom(e.target.value)}
         />
       </div>
+
+      <p className="mt-4 text-xs text-paper-faint">{t("form.ubicacionLabel")}</p>
+      <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_auto]">
+        <input
+          className={inputClass}
+          type="number"
+          step="any"
+          min="-90"
+          max="90"
+          placeholder={t("form.latPlaceholder")}
+          aria-label={t("form.lat")}
+          value={lat}
+          onChange={(e) => setLat(e.target.value)}
+        />
+        <input
+          className={inputClass}
+          type="number"
+          step="any"
+          min="-180"
+          max="180"
+          placeholder={t("form.lonPlaceholder")}
+          aria-label={t("form.lon")}
+          value={lon}
+          onChange={(e) => setLon(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={usarMiUbicacion}
+          disabled={ubicando}
+          className="col-span-2 rounded-chip border border-ink-line px-3 py-2 text-xs text-paper-muted transition-colors hover:border-action hover:text-action disabled:cursor-not-allowed sm:col-span-1"
+        >
+          {ubicando ? t("form.obteniendoUbicacion") : t("form.usarMiUbicacion")}
+        </button>
+      </div>
+      {(lat || lon) && (
+        <button
+          type="button"
+          onClick={() => {
+            setLat("");
+            setLon("");
+          }}
+          className="mt-2 text-xs text-paper-faint underline decoration-dotted hover:text-action"
+        >
+          {t("form.quitarUbicacion")}
+        </button>
+      )}
+      {errorUbicacion && (
+        <p className="mt-2 text-xs text-signal-critica">{t("form.ubicacionNoDisponible")}</p>
+      )}
 
       <button
         type="submit"

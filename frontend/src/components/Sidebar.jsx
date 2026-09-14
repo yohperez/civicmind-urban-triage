@@ -1,12 +1,16 @@
 import { useI18n } from "../i18n/I18nContext.jsx";
 import { useTheme } from "../theme/ThemeContext.jsx";
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose = () => {} }) {
   const { t } = useI18n();
   const pasos = t("sidebar.pasos");
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-ink-line bg-ink">
+    <aside
+      className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 shrink-0 -translate-x-full flex-col border-r border-ink-line bg-ink transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:translate-x-0 ${
+        open ? "translate-x-0" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-ink-line px-5 py-5">
         <div className="flex items-center gap-2.5">
           <img src="/logo-mark.svg" alt="CivicMind" className="h-9 w-9 shrink-0" />
@@ -19,7 +23,19 @@ export default function Sidebar() {
             </p>
           </div>
         </div>
-        <PreferenceToggles />
+        <div className="flex items-center gap-1">
+          <PreferenceToggles />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("nav.cerrarMenu")}
+            className="flex h-[26px] w-[26px] items-center justify-center rounded-chip border border-ink-line text-paper-muted lg:hidden"
+          >
+            <svg width="12" height="12" viewBox="0 0 20 20" fill="none">
+              <path d="M4 4l12 12M16 4 4 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
