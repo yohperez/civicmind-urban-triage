@@ -24,7 +24,7 @@ para el porqué de la migración.
 🔗 **Repositorio:** [github.com/yohperez/civicmind-urban-triage](https://github.com/yohperez/civicmind-urban-triage)
 🔗 **Frontend en producción:** [civicmind.up.railway.app](https://civicmind.up.railway.app/)
 🔗 **Backend (API):** [backend-civicmind.up.railway.app](https://backend-civicmind.up.railway.app/)
-🔗 **Dashboard Lite (Streamlit):** [backend-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/)
+🔗 **Dashboard Lite (Streamlit):** [dashboard-civicmind.up.railway.app](https://dashboard-civicmind.up.railway.app/)
 ## Por qué esta arquitectura (decisión de diseño)
 
 Se prioriza **Ollama** como proveedor por defecto para:
