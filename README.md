@@ -21,6 +21,8 @@ Existe también una versión previa del dashboard en **Streamlit**
 React como interfaz principal — ver [`frontend/DEPLOY.md`](frontend/DEPLOY.md)
 para el porqué de la migración.
 
+🔗 **Video:** [Demo y Explicaciones(https://drive.google.com/file/d/1J_5mavCTK4QRXV39-vEKrqn6r_4DAQrt/view?usp=drivesdk)
+
 🔗 **Repositorio:** [github.com/yohperez/civicmind-urban-triage](https://github.com/yohperez/civicmind-urban-triage)
 🔗 **Frontend en producción:** [civicmind.up.railway.app](https://civicmind.up.railway.app/)
 🔗 **Backend (API):** [backend-civicmind.up.railway.app](https://backend-civicmind.up.railway.app/)
